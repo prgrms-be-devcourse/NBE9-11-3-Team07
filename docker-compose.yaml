@@ -1,0 +1,77 @@
+services:
+  # 1. 기존 MySQL (이름 유지)
+  db:
+    image: mysql:8.0
+    container_name: moju-mysql
+    ports:
+      - "3306:3306"
+    environment:
+      MYSQL_ROOT_PASSWORD: root
+      MYSQL_DATABASE: moju_db
+    volumes:
+      - ./mysql_data:/var/lib/mysql
+    networks:
+      - moju-network
+
+  # 2. 기존 Redis (이름 유지)
+  redis:
+    image: redis:latest
+    container_name: moju-redis
+    ports:
+      - "6379:6379"
+    networks:
+      - moju-network
+
+  # 3. 추가: 스프링 부트 애플리케이션 (우리 서버)
+  app:
+    build: . # 현재 폴더의 Dockerfile을 읽어서 빌드합니다.
+    container_name: moju-app
+    ports:
+      - "8080:8080"
+    env_file:
+      - .env
+    environment:
+      - SPRING_DATASOURCE_URL=jdbc:mysql://db:3306/moju_db?useSSL=false&allowPublicKeyRetrieval=true
+      - SPRING_REDIS_HOST=redis
+      - GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID}
+      - GOOGLE_CLIENT_SECRET=${GOOGLE_CLIENT_SECRET}
+    depends_on:
+      - db
+      - redis
+    networks:
+      - moju-network
+
+  # 4. 추가: 프로메테우스 (서버 상태 수집기)
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: moju-prometheus
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml
+    ports:
+      - "9090:9090"
+    networks:
+      - moju-network
+
+  # 5. 추가: 인플럭스디비 (k6 결과 저장소)
+  influxdb:
+    image: influxdb:1.8
+    container_name: moju-influxdb
+    ports:
+      - "8086:8086"
+    environment:
+      - INFLUXDB_DB=k6
+    networks:
+      - moju-network
+
+  # 6. 추가: 그라파나 (전광판)
+  grafana:
+    image: grafana/grafana:latest
+    container_name: moju-grafana
+    ports:
+      - "3001:3000"
+    networks:
+      - moju-network
+
+networks:
+  moju-network:
+    driver: bridge

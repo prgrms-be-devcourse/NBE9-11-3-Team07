@@ -1,0 +1,8 @@
+global:
+  scrape_interval: 2s # 빠른 모니터링을 위해 2초마다 수집
+
+scrape_configs:
+  - job_name: 'moju-app'
+    metrics_path: '/actuator/prometheus'
+    static_configs:
+      - targets: ['app:8080'] # docker-compose에 정의한 서비스 이름(app) 사용

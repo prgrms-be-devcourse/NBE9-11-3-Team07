@@ -1,0 +1,59 @@
+spring:
+  application:
+    name: mozu
+
+  profiles:
+    active: dev
+
+  data:
+    redis:
+      host: redis
+      port: 6379
+
+  datasource:
+    url: jdbc:mysql://db:3306/moju_db?serverTimezone=Asia/Seoul&useSSL=false&allowPublicKeyRetrieval=true
+    username: root
+    password: root
+    driver-class-name: com.mysql.cj.jdbc.Driver
+
+  sql:
+    init:
+      mode: always
+
+  jpa:
+    defer-datasource-initialization: true
+    hibernate:
+      ddl-auto: update
+    show-sql: true
+    properties:
+      hibernate:
+        format_sql: true
+
+  security:
+    oauth2:
+      client:
+        registration:
+          google:
+            client-id: ${GOOGLE_CLIENT_ID}
+            client-secret: ${GOOGLE_CLIENT_SECRET}
+            scope:
+              - email
+              - profile
+            redirect-uri: http://localhost:8080/login/oauth2/code/google
+
+jwt:
+  secret: thisIsATestSecretKeyForLocalDevelopment123456
+  expiration: 1800000
+  refresh-expiration: 604800000
+
+# 모니터링 설정 (윤현정 추가)
+management:
+  endpoints:
+    web:
+      exposure:
+        include: "prometheus,info,health,metrics"
+  endpoint:
+    prometheus:
+      enabled: true
+    health:
+      show-details: always
