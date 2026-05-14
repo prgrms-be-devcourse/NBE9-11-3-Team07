@@ -67,10 +67,10 @@ class DataInsertTrigger {
             for (i in currentCount.toInt() + 1..total) {
                 batch.add(
                     Customer(
-                        email = "user$i@test.com",  //
+                        email = "user$i@test.com",  // Builder -> named argument 로 변환
                         name = "테스터$i",
                         provider = "google",
-                        providerId = "google$i",
+                        providerId = "google_$i",
                         role = "USER",
                         password = null
                     )
