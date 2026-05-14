@@ -1,3 +1,4 @@
+// src/main/kotlin/com/back/mozu/global/response/Rq.kt
 package com.back.mozu.global.response
 
 import com.back.mozu.domain.customer.entity.Customer
@@ -34,7 +35,7 @@ class Rq(
         val identifier = authentication.name
 
         actor = try {
-            customerService.findById(UUID.fromString(identifier)).orElse(null)
+            customerService.findByIdOrNull(UUID.fromString(identifier))
         } catch (_: IllegalArgumentException) {
             customerService.findByEmail(identifier).orElse(null)
         }
