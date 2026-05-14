@@ -2,4 +2,29 @@ reviews:
   profile: chill
   high_level_summary: true
   poem: false
+  instructions: |
+    ## 코틀린 컨벤션 체크리스트
+    PR 리뷰 시 아래 항목을 반드시 확인해주세요.
+
+    ### ① DTO → data class
+    - DTO, 요청/응답 클래스가 data class로 전환되었는지 확인
+    - val 사용 여부 확인
+
+    ### ② Entity → data class 금지
+    - Entity에 data class 사용 시 반드시 지적
+    - JPA 연관관계 무한루프 위험
+
+    ### ③ !! 사용 금지
+    - !! 발견 시 반드시 지적
+    - ?. 또는 ?: 기본값 방식으로 수정 제안
+
+    ### ④ Optional → findByIdOrNull
+    - orElseThrow 사용 시 findByIdOrNull ?: throw 로 변경 제안
+
+    ### ⑤ 체크리스트
+    - Lombok 어노테이션 제거 여부
+    - Stream → 코틀린 컬렉션 함수 변환 여부
+    - 트랜잭션 롤백 의도치 않게 발생하는지
+    - nullable 처리 적절한지
+
 language: ko
