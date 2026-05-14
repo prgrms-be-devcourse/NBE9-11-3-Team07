@@ -4,19 +4,17 @@ import jakarta.servlet.FilterChain
 import jakarta.servlet.ServletException
 import jakarta.servlet.http.HttpServletRequest
 import jakarta.servlet.http.HttpServletResponse
-import lombok.RequiredArgsConstructor
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken
 import org.springframework.security.core.authority.SimpleGrantedAuthority
 import org.springframework.security.core.context.SecurityContextHolder
 import org.springframework.stereotype.Component
 import org.springframework.web.filter.OncePerRequestFilter
 import java.io.IOException
-import java.util.List
 
 @Component
-@RequiredArgsConstructor
-class JwtAuthenticationFilter : OncePerRequestFilter() {
-    private val jwtProvider: JwtProvider? = null
+class JwtAuthenticationFilter(
+    private val jwtProvider: JwtProvider  // 생성자 주입으로 변경
+) : OncePerRequestFilter() {
 
     @Throws(ServletException::class, IOException::class)
     override fun doFilterInternal(
@@ -27,22 +25,22 @@ class JwtAuthenticationFilter : OncePerRequestFilter() {
         val token = resolveToken(request)
 
         if (token != null) {
-            if (jwtProvider!!.validateToken(token)) {
+            if (jwtProvider.validateToken(token)) {
                 val userId = jwtProvider.getUserId(token)
                 val role = jwtProvider.getRole(token)
 
                 val authentication =
                     UsernamePasswordAuthenticationToken(
-                        userId!!,
+                        userId,
                         null,
-                        List.of<SimpleGrantedAuthority?>(SimpleGrantedAuthority("ROLE_" + role))
+                        listOf(SimpleGrantedAuthority("ROLE_$role"))    // listOf + 문자열 템플릿 수정
                     )
 
-                SecurityContextHolder.getContext().setAuthentication(authentication)
+                SecurityContextHolder.getContext().authentication = authentication  // setter -> 프로퍼티 직접 접근으로 수정
             } else {
                 // 토큰 만료 시 401 반환
-                response.setStatus(HttpServletResponse.SC_UNAUTHORIZED)
-                response.getWriter().write("{\"error\": \"Token expired\"}")
+                response.status = HttpServletResponse.SC_UNAUTHORIZED   // setter -> 프로퍼티 직접 접근으로 수정
+                response.writer.write("{\"error\": \"Token expired\"}") // setter -> 프로퍼티 직접 접근으로 수정
                 return
             }
         }

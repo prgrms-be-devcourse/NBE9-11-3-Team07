@@ -11,19 +11,19 @@ import javax.crypto.SecretKey
 @Component
 class JwtProvider {
     @Value("\${jwt.secret}") // application.yml의 jwt.secret 값을 주입받음
-    private val secret: String? = null
+    private lateinit var secret: String // @Value값 주입 + 참조타입 이므로 lateinit var 사용
 
     @Value("\${jwt.expiration}")
-    private val expiration: Long = 0
+    private val expiration: Long = 0    // @Value값 주입 이지만 원시타입 이므로 기본값 으로 해결 가능
 
     @Value("\${jwt.refresh-expiration}")
     private val refreshExpiration: Long = 0
 
     private val signingKey: SecretKey
-        get() = Keys.hmacShaKeyFor(secret!!.toByteArray())
+        get() = Keys.hmacShaKeyFor(secret.toByteArray())
 
     // 토큰 생성, jwt 문자열로 변환
-    fun createToken(userId: String?, role: String?): String? {
+    fun createToken(userId: String, role: String): String {
         return Jwts.builder()
             .claim("userId", userId) // payload에 저장
             .claim("role", role)
@@ -34,7 +34,7 @@ class JwtProvider {
     }
 
     // 토큰 유효성 검증
-    fun validateToken(token: String?): Boolean {
+    fun validateToken(token: String): Boolean {
         try {
             Jwts.parser()
                 .verifyWith(this.signingKey) // signature로 서명 검증
@@ -47,7 +47,7 @@ class JwtProvider {
     }
 
     // 토큰 파싱 payload 꺼내기
-    private fun getClaims(token: String?): Claims? {
+    private fun getClaims(token: String): Claims {
         return Jwts.parser()
             .verifyWith(this.signingKey)
             .build()
@@ -55,15 +55,15 @@ class JwtProvider {
             .getPayload()
     }
 
-    fun getUserId(token: String?): String? {
-        return getClaims(token)!!.get<String?>("userId", String::class.java)
+    fun getUserId(token: String): String {
+        return getClaims(token).get("userId", String::class.java)
     }
 
-    fun getRole(token: String?): String? {
-        return getClaims(token)!!.get<String?>("role", String::class.java)
+    fun getRole(token: String): String {
+        return getClaims(token).get("role", String::class.java)
     }
 
-    fun createRefreshToken(userId: String?, role: String?): String? {
+    fun createRefreshToken(userId: String, role: String): String {
         return Jwts.builder()
             .claim("userId", userId)
             .claim("role", role)
@@ -73,7 +73,7 @@ class JwtProvider {
             .compact()
     }
 
-    fun validateRefreshToken(token: String?): Boolean {
+    fun validateRefreshToken(token: String): Boolean {
         return validateToken(token)
     }
 }
