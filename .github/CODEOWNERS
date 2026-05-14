@@ -1,1 +1,17 @@
+cat > ~/Documents/NBE9-11-3-Team07/.github/CODEOWNERS << 'EOF'
+# 전체 기본 리뷰어 (팀장)
 * @kyoungtta
+
+# reservation (강경서) ↔ 강준식 서로 리뷰
+src/main/java/com/back/mozu/domain/reservation/ @junsick-k
+
+# customer + queue (강준식) ↔ 강경서 서로 리뷰
+src/main/java/com/back/mozu/domain/customer/ @kyoungtta
+src/main/java/com/back/mozu/domain/queue/ @kyoungtta
+
+# setting (정종욱) ↔ 오상민 서로 리뷰
+src/main/java/com/back/mozu/domain/setting/ @5s-mini
+
+# admin (오상민) ↔ 정종욱 서로 리뷰
+src/main/java/com/back/mozu/domain/admin/ @jonguk-jeong
+EOF
