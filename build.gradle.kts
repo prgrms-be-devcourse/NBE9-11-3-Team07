@@ -2,8 +2,13 @@ import org.gradle.kotlin.dsl.implementation
 
 plugins {
     java
-    id("org.springframework.boot") version "4.0.5"
+    // 코틀린 추가
+    kotlin("jvm") version "2.2.21"
+    kotlin("plugin.spring") version "2.2.21" // Spring 빈 open class 처리
+    id("org.springframework.boot") version "4.0.6" // 2차: 4.0.5 → 강사님 버전으로 맞춤
     id("io.spring.dependency-management") version "1.1.7"
+    kotlin("plugin.jpa") version "2.2.21" // JPA Entity open class 처리
+    kotlin("kapt") version "2.2.21" // 어노테이션 프로세서 (QueryDSL, Lombok)
 }
 
 group = "com.back"
@@ -12,7 +17,7 @@ description = "mozu"
 
 java {
     toolchain {
-        languageVersion = JavaLanguageVersion.of(25)
+        languageVersion = JavaLanguageVersion.of(24) // 2차: 25 → 강사님 버전으로 맞춤
     }
 }
 
@@ -21,50 +26,72 @@ repositories {
 }
 
 dependencies {
-    implementation("org.springframework.boot:spring-boot-h2console")
+    // Spring Boot 기본 (2차와 동일)
     implementation("org.springframework.boot:spring-boot-starter-data-jpa")
     implementation("org.springframework.boot:spring-boot-starter-security")
     implementation("org.springframework.boot:spring-boot-starter-validation")
     implementation("org.springframework.boot:spring-boot-starter-webmvc")
     implementation("org.springframework.boot:spring-boot-starter-webservices")
-    implementation("io.jsonwebtoken:jjwt-api:0.12.3")
     implementation("org.springframework.boot:spring-boot-starter-data-redis")
-    runtimeOnly("io.jsonwebtoken:jjwt-impl:0.12.3")
-    runtimeOnly("io.jsonwebtoken:jjwt-jackson:0.12.3")
-    compileOnly("org.projectlombok:lombok")
-    developmentOnly("org.springframework.boot:spring-boot-devtools")
-    runtimeOnly("com.h2database:h2")
-    annotationProcessor("org.projectlombok:lombok")
-    testImplementation("org.springframework.boot:spring-boot-starter-data-jpa-test")
-    testImplementation("org.springframework.boot:spring-boot-starter-validation-test")
-    testImplementation("org.springframework.boot:spring-boot-starter-webmvc-test")
-    testImplementation("org.springframework.boot:spring-boot-starter-webservices-test")
-    runtimeOnly("com.mysql:mysql-connector-j")
-    testCompileOnly("org.projectlombok:lombok")
-    testRuntimeOnly("org.junit.platform:junit-platform-launcher")
-    testAnnotationProcessor("org.projectlombok:lombok")
-    implementation("org.springdoc:springdoc-openapi-starter-webmvc-ui:3.0.0")
-
-    // Security + OAuth2
-    implementation("org.springframework.boot:spring-boot-starter-security")
     implementation("org.springframework.boot:spring-boot-starter-oauth2-client")
+    implementation("org.springframework.boot:spring-boot-starter-actuator")
 
-    // JWT
+    // 코틀린 추가 - 리플렉션, Jackson 코틀린 모듈
+    implementation("org.jetbrains.kotlin:kotlin-reflect")
+    implementation("com.fasterxml.jackson.module:jackson-module-kotlin")
+
+    // JWT (2차와 동일)
     implementation("io.jsonwebtoken:jjwt-api:0.12.6")
     runtimeOnly("io.jsonwebtoken:jjwt-impl:0.12.6")
     runtimeOnly("io.jsonwebtoken:jjwt-jackson:0.12.6")
 
-    // QueryDSL
+    // Lombok (2차와 동일 - 자바 파일 남아있는 동안 필요)
+    compileOnly("org.projectlombok:lombok")
+    annotationProcessor("org.projectlombok:lombok")
+    testCompileOnly("org.projectlombok:lombok")
+    testAnnotationProcessor("org.projectlombok:lombok")
+
+    // QueryDSL - 2차: annotationProcessor → kapt로 변경 (코틀린 환경)
     implementation("com.querydsl:querydsl-jpa:5.0.0:jakarta")
-    annotationProcessor("com.querydsl:querydsl-apt:5.0.0:jakarta")
+    kapt("com.querydsl:querydsl-apt:5.0.0:jakarta") // 변경
     annotationProcessor("jakarta.annotation:jakarta.annotation-api")
     annotationProcessor("jakarta.persistence:jakarta.persistence-api")
 
-    // Prometheus
-    implementation("org.springframework.boot:spring-boot-starter-actuator")
+    // Swagger (2차와 동일)
+    implementation("org.springdoc:springdoc-openapi-starter-webmvc-ui:3.0.0")
+
+    // Redisson 추가 - 분산락 TTL 문제 해결 (Watchdog), finally 타이밍 개선
+    implementation("org.redisson:redisson-spring-boot-starter:3.27.2")
+
+    // Prometheus (2차와 동일)
     implementation("io.micrometer:micrometer-registry-prometheus")
     runtimeOnly("io.micrometer:micrometer-registry-prometheus")
 
+    // DB (2차와 동일)
+    developmentOnly("org.springframework.boot:spring-boot-devtools")
+    runtimeOnly("com.h2database:h2")
+    runtimeOnly("com.mysql:mysql-connector-j")
+
+    // Test (2차와 동일)
+    testImplementation("org.springframework.boot:spring-boot-starter-test")
+    testImplementation("org.springframework.security:spring-security-test")
+    testRuntimeOnly("org.junit.platform:junit-platform-launcher")
+}
+
+kotlin {
+    compilerOptions {
+        freeCompilerArgs.addAll(
+            "-Xjsr305=strict", // Null 안정성 엄격하게
+            "-Xannotation-default-target=param-property" // 강사님 추가 옵션
+        )
+    }
+}
+
+// JPA Entity 코틀린에서 쓰려면 open class 필요 → allOpen으로 자동 처리
+allOpen {
+    annotation("jakarta.persistence.Entity")
+    annotation("jakarta.persistence.MappedSuperclass")
+    annotation("jakarta.persistence.Embeddable")
 }
 
 tasks.withType<Test> {
