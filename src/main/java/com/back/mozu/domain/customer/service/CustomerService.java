@@ -29,4 +29,8 @@ public class CustomerService {
     public boolean existsByEmail(String email) {
         return customerRepository.existsByEmail(email);
     }
+
+    public Customer findByIdOrNull(UUID id) {
+        return customerRepository.findById(id).orElse(null);
+    }
 }

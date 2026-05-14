@@ -12,7 +12,6 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import jakarta.servlet.http.Cookie;
 
-
 @RestController
 @RequestMapping("/api/v1/admin/auth")
 @RequiredArgsConstructor
@@ -30,7 +29,7 @@ public class AdminAuthController {
         AdminLoginResponseDto loginResponse = adminAuthService.login(request);
 
         // Refresh Token 쿠키로 전달
-        Cookie refreshCookie = new Cookie("refreshToken", loginResponse.getRefrestToken());
+        Cookie refreshCookie = new Cookie("refreshToken", loginResponse.getRefreshToken());
         refreshCookie.setHttpOnly(true);
         refreshCookie.setPath("/");
         refreshCookie.setMaxAge(7 * 24 * 60 * 60);  // 7일
