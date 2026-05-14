@@ -37,13 +37,14 @@ public class CustomOAuth2UserService extends DefaultOAuth2UserService {
 
         if(existingCustomer.isEmpty()) {
             customer = customerRepository.save(
-                    Customer.builder()
-                            .email(email)
-                            .provider("google")
-                            .providerId(providerId)
-                            .role("USER")
-                            .name(name)
-                            .build()
+                    new Customer(
+                            email,
+                            "google",
+                            providerId,
+                            "USER",
+                            null,
+                            name
+                    )
             );
             isNewUser = true;
         } else {
