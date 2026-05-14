@@ -50,4 +50,4 @@ src/main/resources/application-dev.yaml
 docker-compose.override.yaml
 >>>>>>> develop
 
-.envCLAUDE.md
+.CLAUDE.md
