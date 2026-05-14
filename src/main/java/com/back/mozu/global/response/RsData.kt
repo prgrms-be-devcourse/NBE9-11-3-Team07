@@ -5,7 +5,6 @@ import com.fasterxml.jackson.annotation.JsonIgnore
 data class RsData<T>(
     val msg: String,
     val resultCode: String,
-    val errorCode: String? = null,
     val data: T? = null,
 ) {
     companion object {
