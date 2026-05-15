@@ -32,14 +32,16 @@ class AdminService(
         val reservations = reservationRepository.findAllWithFilters(date, time, status, pageable)
         val reservationList = reservations.content
 
-        val userIds = reservationList.map { it.userId }.toSet()
+        val userIds = reservationList.mapNotNull { it.userId }.toSet()
 
         val customerMap: Map<UUID, Customer> = customerRepository.findAllById(userIds)
-            .associateBy { it.id }
+            .associateBy { customer ->
+                customer.id ?: throw IllegalStateException("고객 ID가 존재하지 않습니다.")
+            }
 
         val dtoList = reservationList.map { reservation ->
-            val customer = customerMap[reservation.userId]
-            AdminReservationDto(reservation, customer)
+            val customer = reservation.userId?.let { customerMap[it] }
+            AdminReservationDto.from(reservation, customer)
         }
 
         return PageImpl(dtoList, pageable, reservations.totalElements)
@@ -60,8 +62,8 @@ class AdminService(
         reservation.cancelReservation("ADMIN_CANCEL")
 
         return AdminDto.CancelReservationResponse(
-            reservationId = reservation.id,
-            status = reservation.status.name,
+            reservationId = reservation.id ?: throw IllegalStateException("예약 ID가 존재하지 않습니다."),
+            status = (reservation.status ?: throw IllegalStateException("예약 상태가 존재하지 않습니다.")).name,
             reason = request.reason,
             canceledAt = LocalDateTime.now(),
         )

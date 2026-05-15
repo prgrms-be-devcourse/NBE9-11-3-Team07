@@ -8,6 +8,7 @@ import com.back.mozu.global.redis.RedisUtil
 import org.springframework.security.crypto.password.PasswordEncoder
 import org.springframework.stereotype.Service
 import java.time.Duration
+import java.util.Optional
 
 @Service
 class AdminAuthService(
@@ -17,8 +18,8 @@ class AdminAuthService(
     private val redisUtil: RedisUtil,
 ) {
     fun login(request: AdminLoginRequestDto): AdminLoginResponseDto {
-        val customer = customerRepository.findByEmail(request.loginId)
-            .orElseThrow { RuntimeException("존재하지 않는 계정입니다") }
+        val customer = customerRepository.findByEmail(request.loginId).toNullable()
+            ?: throw RuntimeException("존재하지 않는 계정입니다")
 
         if (customer.role != "ADMIN") {
             throw RuntimeException("관리자 권한이 없습니다")
@@ -41,5 +42,9 @@ class AdminAuthService(
                 name = customer.email,
             ),
         )
+    }
+
+    private fun <T> Optional<T>.toNullable(): T? {
+        return orElse(null)
     }
 }

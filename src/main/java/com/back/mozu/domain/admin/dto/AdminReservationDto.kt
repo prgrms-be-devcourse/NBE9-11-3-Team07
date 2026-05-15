@@ -6,18 +6,36 @@ import java.time.LocalDate
 import java.time.LocalDateTime
 import java.time.LocalTime
 
-class AdminReservationDto(
-    reservation: Reservation,
-    customer: Customer?,
+data class AdminReservationDto(
+    val reservationId: String,
+    val userId: String,
+    val userName: String?,
+    val userEmail: String?,
+    val date: LocalDate?,
+    val time: LocalTime?,
+    val guestCount: Int,
+    val status: String,
+    val cancelReason: String?,
+    val createdAt: LocalDateTime,
 ) {
-    val reservationId: String = reservation.id.toString()
-    val userId: String = reservation.userId.toString()
-    val userName: String? = customer?.name
-    val userEmail: String? = customer?.email
-    val date: LocalDate? = reservation.timeSlot?.date
-    val time: LocalTime? = reservation.timeSlot?.time
-    val guestCount: Int = reservation.guestCount
-    val status: String = reservation.status.name
-    val cancelReason: String? = reservation.cancelReason
-    val createdAt: LocalDateTime = reservation.createdAt
+    companion object {
+        fun from(reservation: Reservation, customer: Customer?): AdminReservationDto {
+            val reservationId = reservation.id ?: throw IllegalStateException("예약 ID가 존재하지 않습니다.")
+            val userId = reservation.userId ?: throw IllegalStateException("사용자 ID가 존재하지 않습니다.")
+            val status = reservation.status ?: throw IllegalStateException("예약 상태가 존재하지 않습니다.")
+
+            return AdminReservationDto(
+                reservationId = reservationId.toString(),
+                userId = userId.toString(),
+                userName = customer?.name,
+                userEmail = customer?.email,
+                date = reservation.timeSlot?.date,
+                time = reservation.timeSlot?.time,
+                guestCount = reservation.guestCount,
+                status = status.name,
+                cancelReason = reservation.cancelReason,
+                createdAt = reservation.createdAt,
+            )
+        }
+    }
 }
