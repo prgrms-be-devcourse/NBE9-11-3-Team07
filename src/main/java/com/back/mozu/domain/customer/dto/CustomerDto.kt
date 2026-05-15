@@ -11,7 +11,7 @@ class CustomerDto {
     ) {
         constructor(actor: Customer) : this(
             userId = requireNotNull(actor.id).toString(),
-            name = actor.email,
+            name = actor.name,
             email = actor.email,
             role = actor.role,
         )
