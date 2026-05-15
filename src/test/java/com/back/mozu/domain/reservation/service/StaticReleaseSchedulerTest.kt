@@ -67,20 +67,14 @@ class StaticReleaseSchedulerTest {
         verify(exactly = 1) { timeSlotRepository.findByIdWithLock(timeSlot.id) }
     }
 
-    private fun createTimeSlotEntity(date: LocalDate, time: LocalTime, stock: Int): TimeSlot {
-        val timeSlot = TimeSlot::class.java.getDeclaredConstructor().let {
-            it.isAccessible = true
-            it.newInstance()
-        }
-
-        setField(timeSlot, "id", UUID.randomUUID())
-        setField(timeSlot, "date", date)
-        setField(timeSlot, "time", time)
-        setField(timeSlot, "stock", stock)
-        setField(timeSlot, "version", 0)
-
-        return timeSlot
-    }
+    private fun createTimeSlotEntity(date: LocalDate, time: LocalTime, stock: Int): TimeSlot =
+        TimeSlot(
+            id = UUID.randomUUID(),
+            date = date,
+            time = time,
+            stock = stock,
+            version = 0
+        )
 
     private fun createReservationEntity(
         userId: UUID,
@@ -92,29 +86,17 @@ class StaticReleaseSchedulerTest {
         reservationOpenedAt: LocalDateTime?,
         createdAt: LocalDateTime,
         releaseAt: LocalDateTime?,
-    ): Reservation {
-        val reservation = Reservation::class.java.getDeclaredConstructor().let {
-            it.isAccessible = true
-            it.newInstance()
-        }
-
-        setField(reservation, "id", UUID.randomUUID())
-        setField(reservation, "userId", userId)
-        setField(reservation, "timeSlot", timeSlot)
-        setField(reservation, "guestCount", guestCount)
-        setField(reservation, "status", status)
-        setField(reservation, "cancelledAt", cancelledAt)
-        setField(reservation, "cancelReason", cancelReason)
-        setField(reservation, "reservationOpenedAt", reservationOpenedAt)
-        setField(reservation, "createdAt", createdAt)
-        setField(reservation, "releaseAt", releaseAt)
-
-        return reservation
-    }
-
-    private fun setField(target: Any, name: String, value: Any?) {
-        val field = target::class.java.getDeclaredField(name)
-        field.isAccessible = true
-        field.set(target, value)
-    }
+    ): Reservation =
+        Reservation(
+            id = UUID.randomUUID(),
+            userId = userId,
+            timeSlot = timeSlot,
+            guestCount = guestCount,
+            status = status,
+            cancelledAt = cancelledAt,
+            cancelReason = cancelReason,
+            reservationOpenedAt = reservationOpenedAt,
+            createdAt = createdAt,
+            releaseAt = releaseAt
+        )
 }
