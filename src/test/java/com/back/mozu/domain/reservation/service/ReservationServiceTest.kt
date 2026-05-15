@@ -70,7 +70,7 @@ class ReservationServiceTest {
 
         every { reservationRepository.findById(reservationId) } returns Optional.of(reservation)
         every { reservationRepository.countByUserIdAndStatusAndCancelledAtAfter(any(), any(), any()) } returns 0
-        every { timeSlotRepository.findByIdWithLock(timeSlot.id) } returns Optional.of(timeSlot)
+        every { timeSlotRepository.findByIdWithLock(timeSlot.id ?: error("timeSlot id is null")) } returns timeSlot
 
         // when
         val result = reservationService.cancelMyReservation(userId, reservationId, "단순 변심")
@@ -170,8 +170,8 @@ class ReservationServiceTest {
 
         every { reservationRepository.findById(reservationId) } returns Optional.of(reservation)
         every { reservationRepository.countByUserIdAndStatusAndCancelledAtAfter(any(), any(), any()) } returns 0
-        every { timeSlotRepository.findByIdWithLock(timeSlot.id) } returns Optional.of(timeSlot)
-        every { customerService.findById(userId) } returns Optional.of(customer)
+        every { timeSlotRepository.findByIdWithLock(timeSlot.id ?: error("timeSlot id is null")) } returns timeSlot
+        every { customerService.findByIdOrNull(userId) } returns customer
         every { customer.applyPenaltyUntil(any()) } just runs
 
         // when

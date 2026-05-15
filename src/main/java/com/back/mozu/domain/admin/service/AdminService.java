@@ -6,7 +6,6 @@ import com.back.mozu.domain.customer.entity.Customer;
 import com.back.mozu.domain.customer.repository.CustomerRepository;
 import com.back.mozu.domain.reservation.entity.Reservation;
 import com.back.mozu.domain.reservation.entity.ReservationStatus;
-import com.back.mozu.domain.reservation.repository.ReservationRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;

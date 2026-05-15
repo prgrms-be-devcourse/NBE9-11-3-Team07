@@ -1,7 +1,6 @@
 package com.back.mozu.domain.setting.service;
 
 import com.back.mozu.domain.reservation.entity.TimeSlot;
-import com.back.mozu.domain.reservation.repository.TimeSlotRepository;
 import com.back.mozu.domain.setting.dto.SettingUpdateRequestDto;
 import com.back.mozu.domain.setting.dto.SettingUpdateResponseDto;
 import com.back.mozu.domain.setting.entity.Holiday;

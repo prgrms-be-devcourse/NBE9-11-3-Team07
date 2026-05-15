@@ -1,6 +1,5 @@
 package com.back.mozu.domain.setting.service;
 
-import com.back.mozu.domain.reservation.repository.ReservationRepository;
 import com.back.mozu.domain.setting.dto.HolidayDto;
 import com.back.mozu.domain.setting.entity.Holiday;
 import com.back.mozu.domain.setting.repository.HolidayRepository;
