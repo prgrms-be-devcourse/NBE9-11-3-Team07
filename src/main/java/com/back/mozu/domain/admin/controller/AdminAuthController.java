@@ -30,7 +30,7 @@ public class AdminAuthController {
         AdminLoginResponseDto loginResponse = adminAuthService.login(request);
 
         // Refresh Token 쿠키로 전달
-        Cookie refreshCookie = new Cookie("refreshToken", loginResponse.getRefrestToken());
+        Cookie refreshCookie = new Cookie("refreshToken", loginResponse.getRefreshToken());
         refreshCookie.setHttpOnly(true);
         refreshCookie.setPath("/");
         refreshCookie.setMaxAge(7 * 24 * 60 * 60);  // 7일
