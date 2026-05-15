@@ -130,8 +130,7 @@ class QueueServiceTest @Autowired constructor(
         waitUntilProcessed(threadCount)
 
         // then
-        val successCount = reservationRepository.findAll()
-            .count { it.status == ReservationStatus.CONFIRMED }
+        val successCount = reservationRepository.findAllByStatus(ReservationStatus.CONFIRMED).size
 
         assertThat(successCount).isEqualTo(10)
     }
