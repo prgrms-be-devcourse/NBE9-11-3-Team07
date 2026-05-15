@@ -1,6 +1,5 @@
 package com.back.mozu.domain.reservation.service;
 
-import com.back.mozu.domain.reservation.dto.WaitingRoomResponseDto;
 import com.back.mozu.domain.reservation.entity.Reservation;
 import com.back.mozu.domain.reservation.entity.ReservationStatus;
 import com.back.mozu.domain.reservation.repository.ReservationRepository;
