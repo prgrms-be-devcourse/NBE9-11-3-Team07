@@ -75,7 +75,7 @@ public class AdminService {
         return new AdminDto.CancelReservationResponse(
                 reservation.getId(),
                 reservation.getStatus().name(),
-                request.reason(),
+                request.reason,
                 LocalDateTime.now()
         );
     }
