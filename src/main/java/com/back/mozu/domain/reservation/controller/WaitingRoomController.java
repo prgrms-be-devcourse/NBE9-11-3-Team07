@@ -1,7 +1,6 @@
 package com.back.mozu.domain.reservation.controller;
 
 
-import com.back.mozu.domain.reservation.dto.WaitingRoomResponseDto;
 import com.back.mozu.domain.reservation.service.WaitingRoomService;
 import com.back.mozu.global.response.RsData;
 import lombok.RequiredArgsConstructor;
