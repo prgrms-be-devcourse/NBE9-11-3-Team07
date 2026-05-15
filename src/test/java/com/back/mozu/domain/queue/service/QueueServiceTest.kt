@@ -10,6 +10,7 @@ import com.back.mozu.domain.reservation.repository.TimeSlotRepository
 import org.assertj.core.api.Assertions.assertThat
 import org.assertj.core.api.Assertions.assertThatThrownBy
 import org.junit.jupiter.api.AfterEach
+import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.boot.test.context.SpringBootTest
@@ -29,8 +30,17 @@ class QueueServiceTest @Autowired constructor(
     private val redisTemplate: RedisTemplate<String, String>,
 ) {
 
+    @BeforeEach
+    fun setUp() {
+        cleanUp()
+    }
+
     @AfterEach
-    fun cleanUp() {
+    fun tearDown() {
+        cleanUp()
+    }
+
+    private fun cleanUp() {
         reservationRepository.deleteAllInBatch()
         timeSlotRepository.deleteAllInBatch()
         customerRepository.deleteAllInBatch()
@@ -41,15 +51,46 @@ class QueueServiceTest @Autowired constructor(
     }
 
     private fun createAndSaveCustomer(email: String, providerId: String): Customer {
-        val customer = Customer.builder()
-            .email(email)
-            .provider("local")
-            .providerId(providerId)
-            .role("USER")
-            .name("테스트")
-            .build()
+        val customer = Customer(
+            email = email,
+            provider = "local",
+            providerId = providerId,
+            role = "USER",
+            password = null,
+            name = "테스트",
+        )
 
         return customerRepository.save(customer)
+    }
+
+    private fun createAndSaveTimeSlot(
+        stock: Int,
+        date: LocalDate = LocalDate.now(),
+        time: LocalTime = LocalTime.of(12, 0),
+    ): TimeSlot {
+        val timeSlot = TimeSlot(
+            date = date,
+            time = time,
+            stock = stock,
+        )
+
+        return timeSlotRepository.save(timeSlot)
+    }
+
+    private fun waitUntilProcessed(expectedCount: Int, timeoutMillis: Long = 5_000) {
+        val deadline = System.currentTimeMillis() + timeoutMillis
+
+        while (System.currentTimeMillis() < deadline) {
+            val processedCount = reservationRepository.findAll()
+                .count {
+                    it.status == ReservationStatus.CONFIRMED ||
+                            it.status == ReservationStatus.CANCELED
+                }
+
+            if (processedCount >= expectedCount) return
+
+            Thread.sleep(100)
+        }
     }
 
     @Test
@@ -59,13 +100,7 @@ class QueueServiceTest @Autowired constructor(
         val executorService = Executors.newFixedThreadPool(32)
         val latch = CountDownLatch(threadCount)
 
-        val timeSlot = TimeSlot.builder()
-            .date(LocalDate.now())
-            .time(LocalTime.of(12, 0))
-            .stock(10)
-            .build()
-
-        timeSlotRepository.save(timeSlot)
+        val timeSlot = createAndSaveTimeSlot(stock = 10)
 
         val customers = (0 until threadCount).map { i ->
             createAndSaveCustomer("test$i@test.com", "id_$i")
@@ -75,10 +110,8 @@ class QueueServiceTest @Autowired constructor(
         customers.forEach { currentCustomer ->
             executorService.execute {
                 try {
-                    val customerId: UUID = currentCustomer.id
-
                     queueService.enqueueAttempt(
-                        customerId,
+                        requireNotNull(currentCustomer.id),
                         AttemptRequest(
                             timeSlot.date,
                             timeSlot.time,
@@ -92,7 +125,9 @@ class QueueServiceTest @Autowired constructor(
         }
 
         latch.await()
-        Thread.sleep(2000)
+        executorService.shutdown()
+
+        waitUntilProcessed(threadCount)
 
         // then
         val successCount = reservationRepository.findAll()
@@ -114,7 +149,7 @@ class QueueServiceTest @Autowired constructor(
 
         // when & then
         assertThatThrownBy {
-            queueService.enqueueAttempt(customer.id, request)
+            queueService.enqueueAttempt(requireNotNull(customer.id), request)
         }
             .isInstanceOf(IllegalArgumentException::class.java)
             .hasMessage("존재하지 않는 시간대입니다.")
@@ -137,14 +172,7 @@ class QueueServiceTest @Autowired constructor(
     fun `남은 재고와 예약 인원 동일 시 성공 및 재고 값 0을 반환`() {
         // given
         val customer = createAndSaveCustomer("exact@test.com", "exact123")
-
-        val timeSlot = TimeSlot.builder()
-            .date(LocalDate.now())
-            .time(LocalTime.of(12, 0))
-            .stock(5)
-            .build()
-
-        timeSlotRepository.save(timeSlot)
+        val timeSlot = createAndSaveTimeSlot(stock = 5)
 
         val request = AttemptRequest(
             timeSlot.date,
@@ -153,15 +181,16 @@ class QueueServiceTest @Autowired constructor(
         )
 
         // when
-        val response = queueService.enqueueAttempt(customer.id, request)
-        Thread.sleep(2000)
+        val response = queueService.enqueueAttempt(requireNotNull(customer.id), request)
+
+        waitUntilProcessed(1)
 
         val status = queueService.getAttemptStatus(response.attemptId)
 
         // then
         assertThat(status.status).isEqualTo(ReservationStatus.CONFIRMED)
 
-        val updatedSlot = timeSlotRepository.findById(timeSlot.id).orElseThrow()
+        val updatedSlot = timeSlotRepository.findById(requireNotNull(timeSlot.id)).orElseThrow()
         assertThat(updatedSlot.stock).isEqualTo(0)
     }
 
@@ -169,14 +198,7 @@ class QueueServiceTest @Autowired constructor(
     fun `남은 재고보다 예약 인원이 많을 시 실패 및 CANCELED 상태 반환`() {
         // given
         val customer = createAndSaveCustomer("exceed@test.com", "exceed123")
-
-        val timeSlot = TimeSlot.builder()
-            .date(LocalDate.now())
-            .time(LocalTime.of(12, 0))
-            .stock(5)
-            .build()
-
-        timeSlotRepository.save(timeSlot)
+        val timeSlot = createAndSaveTimeSlot(stock = 5)
 
         val request = AttemptRequest(
             timeSlot.date,
@@ -185,8 +207,9 @@ class QueueServiceTest @Autowired constructor(
         )
 
         // when
-        val response = queueService.enqueueAttempt(customer.id, request)
-        Thread.sleep(2000)
+        val response = queueService.enqueueAttempt(requireNotNull(customer.id), request)
+
+        waitUntilProcessed(1)
 
         val status = queueService.getAttemptStatus(response.attemptId)
 
@@ -198,14 +221,7 @@ class QueueServiceTest @Autowired constructor(
     fun `예약 인원이 1명 미만일 시 IllegalArgumentException 발생`() {
         // given
         val customer = createAndSaveCustomer("invalid@test.com", "invalid123")
-
-        val timeSlot = TimeSlot.builder()
-            .date(LocalDate.now())
-            .time(LocalTime.of(12, 0))
-            .stock(5)
-            .build()
-
-        timeSlotRepository.save(timeSlot)
+        val timeSlot = createAndSaveTimeSlot(stock = 5)
 
         val request = AttemptRequest(
             timeSlot.date,
@@ -215,7 +231,7 @@ class QueueServiceTest @Autowired constructor(
 
         // when & then
         assertThatThrownBy {
-            queueService.enqueueAttempt(customer.id, request)
+            queueService.enqueueAttempt(requireNotNull(customer.id), request)
         }
             .isInstanceOf(IllegalArgumentException::class.java)
             .hasMessage("예약 인원은 1명 이상이어야 합니다.")
@@ -225,14 +241,7 @@ class QueueServiceTest @Autowired constructor(
     fun `동일한 인원이 같은 시간대에 중복 예약 시도 시 예외 발생`() {
         // given
         val customer = createAndSaveCustomer("dup@test.com", "dup123")
-
-        val timeSlot = TimeSlot.builder()
-            .date(LocalDate.now())
-            .time(LocalTime.of(12, 0))
-            .stock(5)
-            .build()
-
-        timeSlotRepository.save(timeSlot)
+        val timeSlot = createAndSaveTimeSlot(stock = 5)
 
         val request = AttemptRequest(
             timeSlot.date,
@@ -240,14 +249,13 @@ class QueueServiceTest @Autowired constructor(
             2,
         )
 
-        queueService.enqueueAttempt(customer.id, request)
+        queueService.enqueueAttempt(requireNotNull(customer.id), request)
 
-        // Redis 클리어 → DB 2차 방어만 테스트
         redisTemplate.keys("queue:*")?.let { redisTemplate.delete(it) }
 
         // when & then
         assertThatThrownBy {
-            queueService.enqueueAttempt(customer.id, request)
+            queueService.enqueueAttempt(requireNotNull(customer.id), request)
         }
             .isInstanceOf(IllegalArgumentException::class.java)
             .hasMessage("이미 처리 중이거나 완료된 예약이 있습니다.")

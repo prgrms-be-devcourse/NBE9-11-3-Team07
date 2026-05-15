@@ -7,9 +7,11 @@ import com.back.mozu.domain.reservation.repository.ReservationRepository
 import com.back.mozu.domain.reservation.repository.TimeSlotRepository
 import org.assertj.core.api.Assertions.assertThat
 import org.junit.jupiter.api.AfterEach
+import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.boot.test.context.SpringBootTest
+import org.springframework.test.context.bean.override.mockito.MockitoBean
 import java.time.LocalDate
 import java.time.LocalDateTime
 import java.time.LocalTime
@@ -22,12 +24,20 @@ class DynamicReleaseSchedulerTest @Autowired constructor(
     private val timeSlotRepository: TimeSlotRepository,
 ) {
 
-    // 정적 스케줄러 자동실행 막기
-    @MockBean
+    @MockitoBean
     private lateinit var staticReleaseScheduler: StaticReleaseScheduler
 
+    @BeforeEach
+    fun setUp() {
+        cleanUp()
+    }
+
     @AfterEach
-    fun cleanUp() {
+    fun tearDown() {
+        cleanUp()
+    }
+
+    private fun cleanUp() {
         reservationRepository.deleteAllInBatch()
         timeSlotRepository.deleteAllInBatch()
     }
@@ -55,11 +65,11 @@ class DynamicReleaseSchedulerTest @Autowired constructor(
         )
 
         // when
-        dynamicReleaseScheduler.releaseStock(reservation.id)
+        dynamicReleaseScheduler.releaseStock(requireNotNull(reservation.id))
 
         // then
-        val result = reservationRepository.findById(reservation.id).orElseThrow()
-        val updatedSlot = timeSlotRepository.findById(timeSlot.id).orElseThrow()
+        val result = reservationRepository.findById(requireNotNull(reservation.id)).orElseThrow()
+        val updatedSlot = timeSlotRepository.findById(requireNotNull(timeSlot.id)).orElseThrow()
 
         assertThat(result.status).isEqualTo(ReservationStatus.CANCELED)
         assertThat(updatedSlot.stock).isEqualTo(10)
@@ -70,11 +80,11 @@ class DynamicReleaseSchedulerTest @Autowired constructor(
         date: LocalDate,
         time: LocalTime,
     ): TimeSlot {
-        val timeSlot = TimeSlot.builder()
-            .date(date)
-            .time(time)
-            .stock(stock)
-            .build()
+        val timeSlot = TimeSlot(
+            date = date,
+            time = time,
+            stock = stock,
+        )
 
         return timeSlotRepository.save(timeSlot)
     }
@@ -89,16 +99,16 @@ class DynamicReleaseSchedulerTest @Autowired constructor(
         reservationOpenedAt: LocalDateTime,
         releaseAt: LocalDateTime,
     ): Reservation {
-        val reservation = Reservation.builder()
-            .userId(userId)
-            .timeSlot(timeSlot)
-            .guestCount(guestCount)
-            .status(status)
-            .cancelledAt(cancelledAt)
-            .cancelReason(cancelReason)
-            .reservationOpenedAt(reservationOpenedAt)
-            .releaseAt(releaseAt)
-            .build()
+        val reservation = Reservation(
+            userId = userId,
+            timeSlot = timeSlot,
+            guestCount = guestCount,
+            status = status,
+            cancelledAt = cancelledAt,
+            cancelReason = cancelReason,
+            reservationOpenedAt = reservationOpenedAt,
+            releaseAt = releaseAt,
+        )
 
         return reservationRepository.save(reservation)
     }
