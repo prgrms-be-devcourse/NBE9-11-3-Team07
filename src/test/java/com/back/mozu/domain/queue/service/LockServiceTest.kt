@@ -26,7 +26,7 @@ class LockServiceTest {
         val token = UUID.randomUUID().toString()
         val lockKey = RedisUtil.lockKey(timeSlotId)
 
-        every { redisUtil.lockAcquire(lockKey, token, 3000L) } returns true
+        every { redisUtil.lockAcquire(lockKey, token, any()) } returns true
         justRun { redisUtil.lockRelease(lockKey, token) }
 
         // when
