@@ -8,6 +8,10 @@ jobs:
   notify:
     runs-on: ubuntu-latest
     steps:
+      - name: 리뷰어 지정 대기
+        if: github.event.action == 'opened'
+        run: sleep 10
+
       - name: PR 오픈 알림
         if: github.event.action == 'opened'
         uses: slackapi/slack-github-action@v1.24.0
@@ -16,6 +20,10 @@ jobs:
           slack-message: |
             🔔 PR 오픈
             *${{ github.event.pull_request.title }}*
+            작성자: ${{ github.event.pull_request.user.login }}
+            리뷰어: ${{ join(github.event.pull_request.requested_reviewers.*.login, ', ') }}
+            브랜치: `${{ github.event.pull_request.head.ref }}` → `${{ github.event.pull_request.base.ref }}`
+            변경 파일: ${{ github.event.pull_request.changed_files }}개
             ${{ github.event.pull_request.html_url }}
         env:
           SLACK_BOT_TOKEN: ${{ secrets.SLACK_BOT_TOKEN }}
@@ -28,6 +36,9 @@ jobs:
           slack-message: |
             ✅ PR 머지
             *${{ github.event.pull_request.title }}*
+            작성자: ${{ github.event.pull_request.user.login }}
+            머지한 사람: ${{ github.event.pull_request.merged_by.login }}
+            브랜치: `${{ github.event.pull_request.head.ref }}` → `${{ github.event.pull_request.base.ref }}`
             ${{ github.event.pull_request.html_url }}
         env:
           SLACK_BOT_TOKEN: ${{ secrets.SLACK_BOT_TOKEN }}
