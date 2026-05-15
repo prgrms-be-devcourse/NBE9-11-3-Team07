@@ -1,4 +1,3 @@
-// src/main/kotlin/com/back/mozu/global/response/Rq.kt
 package com.back.mozu.global.response
 
 import com.back.mozu.domain.customer.entity.Customer
