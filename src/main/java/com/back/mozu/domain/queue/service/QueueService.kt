@@ -47,7 +47,7 @@ class QueueService(
         }
 
         val timeSlot = timeSlotRepository.findByDateAndTime(request.date, request.time)
-            .orElseThrow { IllegalArgumentException("존재하지 않는 시간대입니다.") }
+            ?: throw IllegalArgumentException("존재하지 않는 시간대입니다.")
 
         val timeSlotId = requireNotNull(timeSlot.id) {
             "타임슬롯 ID가 생성되지 않았습니다."
