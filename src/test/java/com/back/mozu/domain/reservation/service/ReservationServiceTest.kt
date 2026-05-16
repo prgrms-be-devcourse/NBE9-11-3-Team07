@@ -15,7 +15,7 @@ import io.mockk.runs
 import io.mockk.verify
 import org.assertj.core.api.Assertions.assertThat
 import org.assertj.core.api.Assertions.assertThatThrownBy
-import org.hibernate.service.spi.ServiceException
+import com.back.mozu.global.exception.ServiceException
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Test
@@ -155,7 +155,7 @@ class ReservationServiceTest {
         // given
         val userId = UUID.randomUUID()
         val reservationId = UUID.randomUUID()
-        val timeSlot = createTimeSlotEntity(LocalDate.now().plusMonths(1), LocalTime.NOON, 7)
+        val timeSlot = createTimeSlotEntity(LocalDate.now(), LocalTime.NOON, 7)
         val reservation = createReservationEntity(
             reservationId = reservationId,
             userId = userId,
@@ -171,7 +171,7 @@ class ReservationServiceTest {
         every { reservationRepository.findById(reservationId) } returns Optional.of(reservation)
         every { reservationRepository.countByUserIdAndStatusAndCancelledAtAfter(any(), any(), any()) } returns 0
         every { timeSlotRepository.findByIdWithLock(timeSlot.id ?: error("timeSlot id is null")) } returns timeSlot
-        every { customerService.findById(userId) } returns Optional.of(customer)
+        every { customerService.findByIdOrNull(userId) } returns customer
         every { customer.applyPenaltyUntil(any()) } just runs
 
         // when
