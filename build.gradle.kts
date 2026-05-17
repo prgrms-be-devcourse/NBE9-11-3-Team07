@@ -77,6 +77,10 @@ dependencies {
     testRuntimeOnly("org.junit.platform:junit-platform-launcher")
 }
 
+kapt {
+    keepJavacAnnotationProcessors = true
+}
+
 kotlin {
     compilerOptions {
         freeCompilerArgs.addAll(
