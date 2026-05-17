@@ -35,7 +35,7 @@ class QueueService(
     @Transactional
     fun enqueueAttempt(userId: UUID, request: AttemptRequest): AttemptResponse {
         val customer = customerService.findById(userId)
-            .orElseThrow { IllegalArgumentException("존재하지 않는 사용자입니다.") }
+            ?: throw IllegalArgumentException("존재하지 않는 사용자입니다.")
 
         require(!customer.isPenaltyActive(LocalDateTime.now())) {
             "현재 예약이 제한된 사용자입니다."
@@ -47,7 +47,7 @@ class QueueService(
         }
 
         val timeSlot = timeSlotRepository.findByDateAndTime(request.date, request.time)
-            .orElseThrow { IllegalArgumentException("존재하지 않는 시간대입니다.") }
+            ?: throw IllegalArgumentException("존재하지 않는 시간대입니다.")
 
         val timeSlotId = requireNotNull(timeSlot.id) {
             "타임슬롯 ID가 생성되지 않았습니다."
