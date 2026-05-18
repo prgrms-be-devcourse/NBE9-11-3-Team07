@@ -1,17 +1,20 @@
 package com.back.mozu.domain.queue.service
 
 import com.back.mozu.global.redis.RedisUtil
+import org.redisson.api.RedissonClient
 import org.slf4j.LoggerFactory
 import org.springframework.stereotype.Service
+import java.util.concurrent.TimeUnit
 
 @Service
 class LockService(
-    private val redisUtil: RedisUtil,
+    private val redissonClient: RedissonClient,
 ) {
     // 분산 락 설정
     fun acquireLock(timeSlotId: String, token: String): Boolean {
         val lockKey = RedisUtil.lockKey(timeSlotId)
-        val isAcquired = redisUtil.lockAcquire(lockKey, token, MAX_LOCK_TIME)
+        val lock = redissonClient.getLock(lockKey)
+        val isAcquired = lock.tryLock(MAX_LOCK_TIME, TimeUnit.MILLISECONDS)
 
         if (isAcquired) {
             log.info("[Lock 획득 성공] timeSlotId: {}, token: {}", timeSlotId, token)
@@ -25,11 +28,15 @@ class LockService(
     // 분산 락 해제
     fun releaseLock(timeSlotId: String, token: String) {
         val lockKey = RedisUtil.lockKey(timeSlotId)
+        val lock = redissonClient.getLock(lockKey)
 
-        // RedisUtil 내부의 Lua 스크립트를 통해 내 토큰일 경우 삭제
-        redisUtil.lockRelease(lockKey, token)
+        if (lock.isHeldByCurrentThread) {
+            lock.unlock()
+            log.info("[Lock 해제 완료] timeSlotId: {}, token: {}", timeSlotId, token)
+            return
+        }
 
-        log.info("[Lock 해제 완료] timeSlotId: {}, token: {}", timeSlotId, token)
+        log.warn("[Lock 해제 실패 - 현재 스레드가 소유하지 않음] timeSlotId: {}, token: {}", timeSlotId, token)
     }
 
     companion object {
