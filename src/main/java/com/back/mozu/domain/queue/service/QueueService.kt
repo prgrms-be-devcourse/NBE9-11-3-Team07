@@ -17,6 +17,7 @@ import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
 import org.springframework.transaction.support.TransactionSynchronization
 import org.springframework.transaction.support.TransactionSynchronizationManager
+import org.springframework.data.repository.findByIdOrNull
 import java.time.Duration
 import java.time.LocalDateTime
 import java.util.UUID
@@ -118,8 +119,8 @@ class QueueService(
     // 현재 상태 응답 - 내 순번이 몇번인지 폴링
     @Transactional(readOnly = true)
     fun getAttemptStatus(attemptId: UUID): StatusResponse {
-        val reservation = reservationRepository.findById(attemptId)
-            .orElseThrow { IllegalArgumentException("존재하지 않는 예약 시도입니다.") }
+        val reservation = reservationRepository.findByIdOrNull(attemptId)
+            ?: throw IllegalArgumentException("존재하지 않는 예약 시도입니다.")
 
         val status = requireNotNull(reservation.status) {
             "예약 상태가 존재하지 않습니다."
