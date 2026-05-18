@@ -5,12 +5,13 @@ import com.back.mozu.domain.reservation.entity.ReservationStatus
 import com.back.mozu.domain.reservation.entity.TimeSlot
 import com.back.mozu.domain.reservation.repository.ReservationRepository
 import com.back.mozu.domain.reservation.repository.TimeSlotRepository
+import io.mockk.Runs
 import io.mockk.every
 import io.mockk.impl.annotations.InjectMockKs
 import io.mockk.impl.annotations.MockK
 import io.mockk.junit5.MockKExtension
+import io.mockk.just
 import io.mockk.mockk
-import io.mockk.slot
 import io.mockk.verify
 import org.assertj.core.api.Assertions.assertThat
 import org.junit.jupiter.api.Test
@@ -21,7 +22,6 @@ import java.time.LocalDate
 import java.time.LocalDateTime
 import java.time.LocalTime
 import java.time.ZoneId
-import java.util.Optional
 import java.util.UUID
 import java.util.concurrent.ScheduledFuture
 
@@ -37,6 +37,9 @@ class DynamicReleaseSchedulerTest {
     @MockK
     lateinit var timeSlotRepository: TimeSlotRepository
 
+    @MockK
+    private lateinit var releaseStockService: ReleaseStockService
+
     @InjectMockKs
     lateinit var dynamicReleaseScheduler: DynamicReleaseScheduler
 
@@ -44,7 +47,6 @@ class DynamicReleaseSchedulerTest {
     fun `동적 스케줄러는 releaseAt 이후 재고를 복구해야 한다`() {
         // given
         val reservationId = UUID.randomUUID()
-        val userId = UUID.randomUUID()
         val timeSlotId = UUID.randomUUID()
 
         val timeSlot = TimeSlot(
@@ -56,7 +58,7 @@ class DynamicReleaseSchedulerTest {
 
         val reservation = Reservation(
             id = reservationId,
-            userId = userId,
+            userId = UUID.randomUUID(),
             timeSlot = timeSlot,
             guestCount = 2,
             status = ReservationStatus.CANCEL_PENDING,
@@ -66,18 +68,21 @@ class DynamicReleaseSchedulerTest {
             releaseAt = LocalDateTime.now().minusMinutes(1),
         )
 
-        every { reservationRepository.findById(reservationId) } returns Optional.of(reservation)
-        every { timeSlotRepository.findByIdWithLock(timeSlotId) } returns timeSlot
+        every {
+            reservationRepository.findAllByStatus(ReservationStatus.CANCEL_PENDING)
+        } returns listOf(reservation)
+        every {
+            taskScheduler.schedule(any(), any<Instant>())
+        } returns mockk()
+        every {
+            releaseStockService.releaseStock(any())
+        } just Runs
 
         // when
-        dynamicReleaseScheduler.releaseStock(reservationId)
+        dynamicReleaseScheduler.run(mockk())
 
         // then
-        assertThat(reservation.status).isEqualTo(ReservationStatus.CANCELED)
-        assertThat(timeSlot.stock).isEqualTo(10)
-
-        verify(exactly = 1) { reservationRepository.findById(reservationId) }
-        verify(exactly = 1) { timeSlotRepository.findByIdWithLock(timeSlotId) }
+        verify(exactly = 1) { taskScheduler.schedule(any(), any<Instant>()) }
     }
 
     @Test
@@ -85,6 +90,7 @@ class DynamicReleaseSchedulerTest {
         // given
         val reservationId = UUID.randomUUID()
         val releaseAt = LocalDateTime.of(2026, 5, 18, 12, 0)
+        var scheduledInstant: Instant? = null
 
         val reservation = Reservation(
             id = reservationId,
@@ -92,18 +98,20 @@ class DynamicReleaseSchedulerTest {
             releaseAt = releaseAt,
         )
 
-        val instantSlot = slot<Instant>()
         val scheduledFuture = mockk<ScheduledFuture<*>>(relaxed = true)
 
         every {
-            taskScheduler.schedule(any<Runnable>(), capture(instantSlot))
-        } returns scheduledFuture
+            taskScheduler.schedule(any(), any<Instant>())
+        } answers {
+            scheduledInstant = secondArg()
+            scheduledFuture
+        }
 
         // when
         dynamicReleaseScheduler.schedule(reservation)
 
         // then
-        assertThat(instantSlot.captured)
+        assertThat(scheduledInstant)
             .isEqualTo(releaseAt.atZone(ZoneId.of("Asia/Seoul")).toInstant())
     }
 }

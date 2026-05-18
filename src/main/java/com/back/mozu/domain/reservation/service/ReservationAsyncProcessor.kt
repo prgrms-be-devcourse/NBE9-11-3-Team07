@@ -4,8 +4,8 @@ import com.back.mozu.domain.queue.service.LockService
 import com.back.mozu.domain.reservation.repository.ReservationRepository
 import com.back.mozu.domain.reservation.repository.TimeSlotRepository
 import org.slf4j.LoggerFactory
+import org.springframework.dao.OptimisticLockingFailureException
 import org.springframework.data.repository.findByIdOrNull
-import org.springframework.orm.ObjectOptimisticLockingFailureException
 import org.springframework.scheduling.annotation.Async
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
@@ -41,7 +41,7 @@ class ReservationAsyncProcessor(
             stockOccupied = true
 
             reservation.confirmReservation()
-        } catch (e: ObjectOptimisticLockingFailureException) {
+        } catch (e: OptimisticLockingFailureException) {
             reservation.cancelReservation("OPTIMISTIC_LOCK_FAIL")
         } catch (e: IllegalArgumentException) {
             reservation.cancelReservation("RESERVATION_FAILED")
