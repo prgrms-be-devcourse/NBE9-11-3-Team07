@@ -44,7 +44,6 @@ class DynamicReleaseSchedulerTest {
     fun `동적 스케줄러는 releaseAt 이후 재고를 복구해야 한다`() {
         // given
         val reservationId = UUID.randomUUID()
-        val userId = UUID.randomUUID()
         val timeSlotId = UUID.randomUUID()
 
         val timeSlot = TimeSlot(
@@ -56,7 +55,7 @@ class DynamicReleaseSchedulerTest {
 
         val reservation = Reservation(
             id = reservationId,
-            userId = userId,
+            userId = UUID.randomUUID(),
             timeSlot = timeSlot,
             guestCount = 2,
             status = ReservationStatus.CANCEL_PENDING,
@@ -66,15 +65,20 @@ class DynamicReleaseSchedulerTest {
             releaseAt = LocalDateTime.now().minusMinutes(1),
         )
 
-        every { reservationRepository.findAllByStatus(ReservationStatus.CANCEL_PENDING) } returns listOf(reservation)
-        every { taskScheduler.schedule(any(), any<Instant>()) } returns mockk()
-        every { releaseStockService.releaseStock(any()) } just Runs
+        every {
+            reservationRepository.findAllByStatus(ReservationStatus.CANCEL_PENDING)
+        } returns listOf(reservation)
+        every {
+            taskScheduler.schedule(any(), any<Instant>())
+        } returns mockk()
+        every {
+            releaseStockService.releaseStock(any())
+        } just Runs
 
         // when
         dynamicReleaseScheduler.run(mockk())
 
         // then
-        // releaseStockService.releaseStock이 schedule에 등록됐는지 확인
         verify(exactly = 1) { taskScheduler.schedule(any(), any<Instant>()) }
     }
 }

@@ -66,12 +66,16 @@ class AdminService(
         val lockedTimeSlot = timeSlotRepository.findByIdWithLock(timeSlotId)
             ?: throw NoSuchElementException("타임슬롯을 찾을 수 없습니다.")
         lockedTimeSlot.release(reservation.guestCount)
-        reservation.cancelReservation("ADMIN_CANCEL")
+
+        // ADMIN_CANCEL + 관리자 입력 사유 같이 저장
+        reservation.cancelReservation("ADMIN_CANCEL:${request.reason}")
 
         return AdminDto.CancelReservationResponse(
-            reservationId = reservation.id ?: throw IllegalStateException("예약 ID가 존재하지 않습니다."),
-            status = (reservation.status ?: throw IllegalStateException("예약 상태가 존재하지 않습니다.")).name,
-            reason = request.reason,
+            reservationId = reservation.id
+                ?: throw IllegalStateException("예약 ID가 존재하지 않습니다."),
+            status = (reservation.status
+                ?: throw IllegalStateException("예약 상태가 존재하지 않습니다.")).name,
+            reason = reservation.cancelReason ?: "",  // 실제 저장값 반환
             canceledAt = LocalDateTime.now(),
         )
     }
