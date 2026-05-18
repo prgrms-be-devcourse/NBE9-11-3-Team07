@@ -1,3 +1,7 @@
 FROM redis:7.2
-COPY sentinel.conf /etc/redis/sentinel.conf.tpl
-CMD ["sh", "-c", "MASTER_IP=$(getent hosts redis-master | awk '{print $1}') && sed \"s/redis-master/$MASTER_IP/g\" /etc/redis/sentinel.conf.tpl > /tmp/sentinel.conf && redis-sentinel /tmp/sentinel.conf"]
+
+# sentinel.conf를 이미지에 포함
+# resolve-hostnames yes 설정으로 호스트명 그대로 사용 가능
+# volume 마운트 없이 컨테이너 내부 파일 직접 사용
+COPY sentinel.conf /etc/redis/sentinel.conf
+CMD ["redis-sentinel", "/etc/redis/sentinel.conf"]
