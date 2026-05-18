@@ -12,7 +12,7 @@ class AuthService(
 ) {
     fun getMe(email: String): MeResponse {
         val customer = customerRepository.findByEmail(email)
-            .orElseThrow { IllegalArgumentException("유저를 찾을 수 없습니다.") }
+            ?: throw IllegalArgumentException("유저를 찾을 수 없습니다.")
 
         return MeResponse(customer)
     }

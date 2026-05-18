@@ -28,7 +28,7 @@ class CustomOAuth2UserService(
         val customer: Customer
         val isNewUser: Boolean
 
-        if (existingCustomer.isEmpty) {
+        if (existingCustomer == null) {
             customer = customerRepository.save(
                 Customer(
                     email = email,
@@ -41,7 +41,7 @@ class CustomOAuth2UserService(
             )
             isNewUser = true
         } else {
-            customer = existingCustomer.get()
+            customer = existingCustomer
             customer.updateFromOAuth(name, email)
             customerRepository.save(customer)
             isNewUser = false
