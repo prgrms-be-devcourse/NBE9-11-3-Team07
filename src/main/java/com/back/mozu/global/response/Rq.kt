@@ -36,7 +36,7 @@ class Rq(
         actor = try {
             customerService.findByIdOrNull(UUID.fromString(identifier))
         } catch (_: IllegalArgumentException) {
-            customerService.findByEmail(identifier).orElse(null)
+            customerService.findByEmail(identifier)
         }
 
         isActorLoaded = true
