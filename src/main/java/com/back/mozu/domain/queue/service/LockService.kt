@@ -14,7 +14,7 @@ class LockService(
     fun acquireLock(timeSlotId: String, token: String): Boolean {
         val lockKey = RedisUtil.lockKey(timeSlotId)
         val lock = redissonClient.getLock(lockKey)
-        val isAcquired = lock.tryLock(MAX_LOCK_TIME, TimeUnit.MILLISECONDS)
+        val isAcquired = lock.tryLock(MAX_LOCK_TIME, -1, TimeUnit.MILLISECONDS)
 
         if (isAcquired) {
             log.info("[Lock 획득 성공] timeSlotId: {}, token: {}", timeSlotId, token)
@@ -30,10 +30,10 @@ class LockService(
         val lockKey = RedisUtil.lockKey(timeSlotId)
         val lock = redissonClient.getLock(lockKey)
 
-        if (lock.isHeldByCurrentThread) {
+        // 락이 현재 스레드에 의해 소유되고 있는지 확인 후 해제
+        if (lock.isLocked && lock.isHeldByCurrentThread) {
             lock.unlock()
             log.info("[Lock 해제 완료] timeSlotId: {}, token: {}", timeSlotId, token)
-            return
         }
 
         log.warn("[Lock 해제 실패 - 현재 스레드가 소유하지 않음] timeSlotId: {}, token: {}", timeSlotId, token)
