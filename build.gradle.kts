@@ -60,9 +60,6 @@ dependencies {
     // Swagger (2차와 동일)
     implementation("org.springdoc:springdoc-openapi-starter-webmvc-ui:3.0.0")
 
-    // Redisson 추가 - 분산락 TTL 문제 해결 (Watchdog), finally 타이밍 개선
-    implementation("org.redisson:redisson-spring-boot-starter:3.27.2")
-
     // Prometheus (2차와 동일)
     implementation("io.micrometer:micrometer-registry-prometheus")
     runtimeOnly("io.micrometer:micrometer-registry-prometheus")
@@ -76,7 +73,12 @@ dependencies {
     testImplementation("org.springframework.boot:spring-boot-starter-test")
     testImplementation("org.springframework.security:spring-security-test")
     testImplementation("io.mockk:mockk:1.13.8")
+    testImplementation("com.ninja-squad:springmockk:4.0.2")
     testRuntimeOnly("org.junit.platform:junit-platform-launcher")
+}
+
+kapt {
+    keepJavacAnnotationProcessors = true
 }
 
 kotlin {

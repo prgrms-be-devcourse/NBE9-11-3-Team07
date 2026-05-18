@@ -13,6 +13,7 @@ import io.mockk.verify
 import org.assertj.core.api.Assertions.assertThat
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.extension.ExtendWith
+import org.springframework.scheduling.TaskScheduler
 import java.time.LocalDate
 import java.time.LocalDateTime
 import java.time.LocalTime
@@ -21,6 +22,9 @@ import java.util.UUID
 
 @ExtendWith(MockKExtension::class)
 class DynamicReleaseSchedulerTest {
+
+    @MockK
+    lateinit var taskScheduler: TaskScheduler
 
     @MockK
     lateinit var reservationRepository: ReservationRepository
@@ -58,7 +62,7 @@ class DynamicReleaseSchedulerTest {
         )
 
         every { reservationRepository.findById(reservationId) } returns Optional.of(reservation)
-        every { timeSlotRepository.findByIdWithLock(timeSlotId) } returns Optional.of(timeSlot)
+        every { timeSlotRepository.findByIdWithLock(timeSlotId) } returns timeSlot
 
         // when
         dynamicReleaseScheduler.releaseStock(reservationId)
