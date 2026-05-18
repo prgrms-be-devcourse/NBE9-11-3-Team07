@@ -1,0 +1,3 @@
+FROM redis:7.2
+COPY sentinel.conf /etc/redis/sentinel.conf.tpl
+CMD ["sh", "-c", "MASTER_IP=$(getent hosts redis-master | awk '{print $1}') && sed \"s/redis-master/$MASTER_IP/g\" /etc/redis/sentinel.conf.tpl > /tmp/sentinel.conf && redis-sentinel /tmp/sentinel.conf"]
