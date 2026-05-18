@@ -9,16 +9,21 @@ import io.mockk.every
 import io.mockk.impl.annotations.InjectMockKs
 import io.mockk.impl.annotations.MockK
 import io.mockk.junit5.MockKExtension
+import io.mockk.mockk
+import io.mockk.slot
 import io.mockk.verify
 import org.assertj.core.api.Assertions.assertThat
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.extension.ExtendWith
 import org.springframework.scheduling.TaskScheduler
+import java.time.Instant
 import java.time.LocalDate
 import java.time.LocalDateTime
 import java.time.LocalTime
+import java.time.ZoneId
 import java.util.Optional
 import java.util.UUID
+import java.util.concurrent.ScheduledFuture
 
 @ExtendWith(MockKExtension::class)
 class DynamicReleaseSchedulerTest {
@@ -73,5 +78,32 @@ class DynamicReleaseSchedulerTest {
 
         verify(exactly = 1) { reservationRepository.findById(reservationId) }
         verify(exactly = 1) { timeSlotRepository.findByIdWithLock(timeSlotId) }
+    }
+
+    @Test
+    fun `releaseAt은 Asia Seoul 시간 기준으로 스케줄링되어야 한다`() {
+        // given
+        val reservationId = UUID.randomUUID()
+        val releaseAt = LocalDateTime.of(2026, 5, 18, 12, 0)
+
+        val reservation = Reservation(
+            id = reservationId,
+            status = ReservationStatus.CANCEL_PENDING,
+            releaseAt = releaseAt,
+        )
+
+        val instantSlot = slot<Instant>()
+        val scheduledFuture = mockk<ScheduledFuture<*>>(relaxed = true)
+
+        every {
+            taskScheduler.schedule(any<Runnable>(), capture(instantSlot))
+        } returns scheduledFuture
+
+        // when
+        dynamicReleaseScheduler.schedule(reservation)
+
+        // then
+        assertThat(instantSlot.captured)
+            .isEqualTo(releaseAt.atZone(ZoneId.of("Asia/Seoul")).toInstant())
     }
 }
