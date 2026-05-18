@@ -8,7 +8,7 @@ import org.springframework.boot.ApplicationRunner
 import org.springframework.context.annotation.Primary
 import org.springframework.scheduling.TaskScheduler
 import org.springframework.stereotype.Component
-import java.time.ZoneOffset
+import java.time.ZoneId
 
 @Primary
 @Component
@@ -28,9 +28,14 @@ class DynamicReleaseScheduler(
             ?: throw NoSuchElementException("예약 ID가 없습니다.")
         val releaseAt = reservation.releaseAt
             ?: throw NoSuchElementException("releaseAt이 없습니다.")
+
         taskScheduler.schedule(
             { releaseStockService.releaseStock(id) },
-            releaseAt.toInstant(ZoneOffset.UTC)
+            releaseAt.atZone(SEOUL_ZONE_ID).toInstant()
         )
+    }
+
+    companion object {
+        private val SEOUL_ZONE_ID: ZoneId = ZoneId.of("Asia/Seoul")
     }
 }
