@@ -6,6 +6,7 @@ import com.back.mozu.domain.customer.entity.Customer
 import com.back.mozu.domain.customer.repository.CustomerRepository
 import com.back.mozu.domain.reservation.entity.ReservationStatus
 import com.back.mozu.domain.reservation.repository.ReservationRepository
+import com.back.mozu.domain.reservation.repository.TimeSlotRepository
 import org.springframework.data.domain.Page
 import org.springframework.data.domain.PageImpl
 import org.springframework.data.domain.Pageable
@@ -22,6 +23,7 @@ import java.util.UUID
 class AdminService(
     private val reservationRepository: ReservationRepository,
     private val customerRepository: CustomerRepository,
+    private val timeSlotRepository: TimeSlotRepository
 ) {
     fun getReservations(
         date: LocalDate?,
@@ -59,6 +61,11 @@ class AdminService(
             throw IllegalStateException("이미 취소된 예약입니다.")
         }
 
+        val timeSlotId = reservation.timeSlot?.id
+            ?: throw NoSuchElementException("타임슬롯 정보가 없습니다.")
+        val lockedTimeSlot = timeSlotRepository.findByIdWithLock(timeSlotId)
+            ?: throw NoSuchElementException("타임슬롯을 찾을 수 없습니다.")
+        lockedTimeSlot.release(reservation.guestCount)
         reservation.cancelReservation("ADMIN_CANCEL")
 
         return AdminDto.CancelReservationResponse(
