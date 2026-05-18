@@ -47,3 +47,6 @@ src/main/generated/
 docker-compose.override.yaml
 
 .CLAUDE.md
+
+# 페일오버 테스트 로그 파일
+sentinel_failover.log
