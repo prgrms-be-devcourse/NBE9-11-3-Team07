@@ -67,11 +67,11 @@ class QueueServiceRedisTest {
         val c3 = saveCustomer()
 
         // when - 100ms 딜레이로 score(진입 시각) 차이 보장
-        val r1 = queueService.enqueueAttempt(c1.id, atRequest(slot))
+        val r1 = queueService.enqueueAttempt(requireNotNull(c1.id), atRequest(slot))
         Thread.sleep(100)
-        val r2 = queueService.enqueueAttempt(c2.id, atRequest(slot))
+        val r2 = queueService.enqueueAttempt(requireNotNull(c2.id), atRequest(slot))
         Thread.sleep(100)
-        val r3 = queueService.enqueueAttempt(c3.id, atRequest(slot))
+        val r3 = queueService.enqueueAttempt(requireNotNull(c3.id), atRequest(slot))
         Thread.sleep(500) // afterCommit 콜백 완료 대기
 
         // then
@@ -88,9 +88,9 @@ class QueueServiceRedisTest {
         val c2 = saveCustomer()
 
         // when
-        queueService.enqueueAttempt(c1.id, atRequest(slot))
+        queueService.enqueueAttempt(requireNotNull(c1.id), atRequest(slot))
         Thread.sleep(100)
-        val r2 = queueService.enqueueAttempt(c2.id, atRequest(slot))
+        val r2 = queueService.enqueueAttempt(requireNotNull(c2.id), atRequest(slot))
         Thread.sleep(500)
 
         // then
@@ -106,7 +106,7 @@ class QueueServiceRedisTest {
         val slot = saveTimeSlot(LocalTime.of(14, 0))
 
         // when
-        val response = queueService.enqueueAttempt(customer.id, atRequest(slot))
+        val response = queueService.enqueueAttempt(requireNotNull(customer.id), atRequest(slot))
 
         // then - DB가 Source of Truth
         assertThat(reservationRepository.findById(response.attemptId)).isPresent
@@ -118,7 +118,7 @@ class QueueServiceRedisTest {
         val slot = saveTimeSlot(LocalTime.of(15, 0))
         val responses = (1..3).map {
             saveCustomer()
-                .let { c -> queueService.enqueueAttempt(c.id, atRequest(slot)) }
+                .let { c -> queueService.enqueueAttempt(requireNotNull(c.id), atRequest(slot)) }
                 .also { Thread.sleep(100) }
         }
         Thread.sleep(500)
@@ -139,7 +139,7 @@ class QueueServiceRedisTest {
         val slotId = slot.id ?: error("slot.id가 null입니다")
         val responses = (1..5).map {
             saveCustomer()
-                .let { c -> queueService.enqueueAttempt(c.id, atRequest(slot)) }
+                .let { c -> queueService.enqueueAttempt(requireNotNull(c.id), atRequest(slot)) }
                 .also { Thread.sleep(100) }
         }
         Thread.sleep(500)
@@ -172,7 +172,7 @@ class QueueServiceRedisTest {
         )
 
         // when / then
-        assertThatThrownBy { queueService.enqueueAttempt(customer.id, atRequest(slot)) }
+        assertThatThrownBy { queueService.enqueueAttempt(requireNotNull(customer.id), atRequest(slot)) }
             .isInstanceOf(IllegalArgumentException::class.java)
             .hasMessage("이미 대기열에 있습니다.")
     }

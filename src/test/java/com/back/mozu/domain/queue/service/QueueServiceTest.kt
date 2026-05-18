@@ -113,8 +113,8 @@ class QueueServiceTest @Autowired constructor(
                     queueService.enqueueAttempt(
                         requireNotNull(currentCustomer.id),
                         AttemptRequest(
-                            timeSlot.date,
-                            timeSlot.time,
+                            requireNotNull(timeSlot.date),
+                            requireNotNull(timeSlot.time),
                             1,
                         ),
                     )
@@ -174,8 +174,8 @@ class QueueServiceTest @Autowired constructor(
         val timeSlot = createAndSaveTimeSlot(stock = 5)
 
         val request = AttemptRequest(
-            timeSlot.date,
-            timeSlot.time,
+            requireNotNull(timeSlot.date),
+            requireNotNull(timeSlot.time),
             5,
         )
 
@@ -200,8 +200,8 @@ class QueueServiceTest @Autowired constructor(
         val timeSlot = createAndSaveTimeSlot(stock = 5)
 
         val request = AttemptRequest(
-            timeSlot.date,
-            timeSlot.time,
+            requireNotNull(timeSlot.date),
+            requireNotNull(timeSlot.time),
             6,
         )
 
@@ -223,8 +223,8 @@ class QueueServiceTest @Autowired constructor(
         val timeSlot = createAndSaveTimeSlot(stock = 5)
 
         val request = AttemptRequest(
-            timeSlot.date,
-            timeSlot.time,
+            requireNotNull(timeSlot.date),
+            requireNotNull(timeSlot.time),
             0,
         )
 
@@ -243,8 +243,8 @@ class QueueServiceTest @Autowired constructor(
         val timeSlot = createAndSaveTimeSlot(stock = 5)
 
         val request = AttemptRequest(
-            timeSlot.date,
-            timeSlot.time,
+            requireNotNull(timeSlot.date),
+            requireNotNull(timeSlot.time),
             2,
         )
 
