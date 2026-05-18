@@ -4,7 +4,7 @@ import com.back.mozu.domain.queue.service.LockService
 import com.back.mozu.domain.reservation.repository.ReservationRepository
 import com.back.mozu.domain.reservation.repository.TimeSlotRepository
 import org.springframework.data.repository.findByIdOrNull
-import org.springframework.orm.ObjectOptimisticLockingFailureException
+import org.springframework.dao.OptimisticLockingFailureException
 import org.springframework.scheduling.annotation.Async
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
@@ -35,7 +35,7 @@ class ReservationAsyncProcessor(
 
             timeSlot.occupy(guestCount)
             reservation.confirmReservation()
-        } catch (e: ObjectOptimisticLockingFailureException) {
+        } catch (e: OptimisticLockingFailureException) {
             // [CASE A] 다른 유저가 찰나의 순간에 먼저 가져감 (낙관적 락 충돌) → 재고는 안 깎혔으므로 예약만 취소
             reservation.cancelReservation("OPTIMISTIC_LOCK_FAIL")
         } catch (e: IllegalArgumentException) {
