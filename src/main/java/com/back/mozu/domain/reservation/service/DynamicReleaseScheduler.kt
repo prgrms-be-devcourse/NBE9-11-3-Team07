@@ -11,6 +11,7 @@ import org.springframework.data.repository.findByIdOrNull
 import org.springframework.scheduling.TaskScheduler
 import org.springframework.stereotype.Component
 import org.springframework.transaction.annotation.Transactional
+import java.time.ZoneId
 import java.time.ZoneOffset
 import java.util.UUID
 
@@ -34,7 +35,7 @@ class DynamicReleaseScheduler(
         val releaseAt = reservation.releaseAt ?: throw NoSuchElementException("releaseAt이 없습니다.")
         taskScheduler.schedule(
             { releaseStock(id) },
-            releaseAt.toInstant(ZoneOffset.UTC)
+            releaseAt.atZone(SEOUL_ZONE_ID).toInstant()
         )
     }
 
@@ -49,5 +50,9 @@ class DynamicReleaseScheduler(
             ?: throw NoSuchElementException("타임슬롯을 찾을 수 없습니다.")
         lockedTimeSlot.release(reservation.guestCount)
         reservation.cancelReservation(reservation.cancelReason)
+    }
+
+    companion object {
+        private val SEOUL_ZONE_ID: ZoneId = ZoneId.of("Asia/Seoul")
     }
 }

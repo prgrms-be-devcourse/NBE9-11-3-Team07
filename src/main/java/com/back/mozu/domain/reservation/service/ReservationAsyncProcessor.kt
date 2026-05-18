@@ -8,6 +8,7 @@ import org.springframework.orm.ObjectOptimisticLockingFailureException
 import org.springframework.scheduling.annotation.Async
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
+import org.slf4j.LoggerFactory
 import java.util.UUID
 
 @Service
@@ -44,7 +45,13 @@ class ReservationAsyncProcessor(
         } catch (e: IllegalStateException) {
             reservation.cancelReservation("RESERVATION_FAILED")
         } catch (e: Exception) {
-            // [CASE C] 그 외 예상치 못한 시스템 에러 → occupy 성공 후 여기서 터졌다면 재고 복구 필요
+            log.error(
+                "비동기 예약 처리 중 시스템 예외 발생: reservationId={}, timeSlotId={}, guestCount={}",
+                reservationId,
+                timeSlotId,
+                guestCount,
+                e,
+            )
             reservation.cancelReservation("SYSTEM_ERROR")
             timeSlot.release(guestCount)
         } finally {
@@ -53,5 +60,9 @@ class ReservationAsyncProcessor(
                 lockService.releaseLock(timeSlotId.toString(), lockToken)
             }
         }
+    }
+
+    companion object {
+        private val log = LoggerFactory.getLogger(ReservationAsyncProcessor::class.java)
     }
 }
