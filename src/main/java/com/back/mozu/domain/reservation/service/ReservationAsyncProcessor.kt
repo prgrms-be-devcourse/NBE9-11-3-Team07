@@ -3,11 +3,14 @@ package com.back.mozu.domain.reservation.service
 import com.back.mozu.domain.queue.service.LockService
 import com.back.mozu.domain.reservation.repository.ReservationRepository
 import com.back.mozu.domain.reservation.repository.TimeSlotRepository
+import org.springframework.data.redis.core.RedisTemplate
 import org.springframework.data.repository.findByIdOrNull
 import org.springframework.orm.ObjectOptimisticLockingFailureException
 import org.springframework.scheduling.annotation.Async
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
+import org.springframework.transaction.support.TransactionSynchronization
+import org.springframework.transaction.support.TransactionSynchronizationManager
 import java.util.UUID
 
 @Service
@@ -15,43 +18,62 @@ class ReservationAsyncProcessor(
     private val reservationRepository: ReservationRepository,
     private val timeSlotRepository: TimeSlotRepository,
     private val lockService: LockService,
+    private val redisTemplate: RedisTemplate<String, String>, // Fail-Fast용 Redis 추가
 ) {
 
     @Async
     @Transactional
     fun processReservation(reservationId: UUID, timeSlotId: UUID, guestCount: Int) {
-        val reservation = reservationRepository.findByIdOrNull(reservationId)
-            ?: throw IllegalArgumentException("예약 기록을 찾을 수 없습니다.")
-        val timeSlot = timeSlotRepository.findByIdOrNull(timeSlotId)
-            ?: throw IllegalArgumentException("타임슬롯을 찾을 수 없습니다.")
-        val lockToken: String = reservationId.toString()
+        val timeSlotIdStr = timeSlotId.toString()
+        val occupiedKey = "isOccupied:$timeSlotIdStr"
+        val isOccupied = redisTemplate.opsForValue().get(occupiedKey)?.toBoolean() ?: false
+        if (isOccupied) {
+            cancelReservationSafely(reservationId, "ALREADY_OCCUPIED_FAIL_FAST")
+            return
+        }
+
         var lockAcquired = false
         try {
-            lockAcquired = lockService.acquireLock(timeSlotId.toString(), lockToken)
+            lockAcquired = lockService.acquireLock(timeSlotIdStr, reservationId.toString())
             if (!lockAcquired) {
-                reservation.cancelReservation("LOCK_ACQUIRE_FAIL")
+                cancelReservationSafely(reservationId, "LOCK_ACQUIRE_FAIL")
                 return
             }
 
+            val reservation = reservationRepository.findByIdOrNull(reservationId)
+                ?: throw IllegalArgumentException("예약 기록을 찾을 수 없습니다.")
+            val timeSlot = timeSlotRepository.findByIdOrNull(timeSlotId)
+                ?: throw IllegalArgumentException("타임슬롯을 찾을 수 없습니다.")
+
             timeSlot.occupy(guestCount)
             reservation.confirmReservation()
+
+            if (timeSlot.stock == 0) {
+                redisTemplate.opsForValue().set(occupiedKey, "true")
+            }
+
         } catch (e: ObjectOptimisticLockingFailureException) {
-            // [CASE A] 다른 유저가 찰나의 순간에 먼저 가져감 (낙관적 락 충돌) → 재고는 안 깎혔으므로 예약만 취소
-            reservation.cancelReservation("OPTIMISTIC_LOCK_FAIL")
+            cancelReservationSafely(reservationId, "OPTIMISTIC_LOCK_FAIL")
         } catch (e: IllegalArgumentException) {
-            // [CASE B] 재고 부족이거나 이미 취소된 건 → occupy에서 실패했으므로 재고 건드리지 않음
-            reservation.cancelReservation("RESERVATION_FAILED")
+            cancelReservationSafely(reservationId, "RESERVATION_FAILED")
         } catch (e: IllegalStateException) {
-            reservation.cancelReservation("RESERVATION_FAILED")
+            cancelReservationSafely(reservationId, "RESERVATION_FAILED")
         } catch (e: Exception) {
-            // [CASE C] 그 외 예상치 못한 시스템 에러 → occupy 성공 후 여기서 터졌다면 재고 복구 필요
-            reservation.cancelReservation("SYSTEM_ERROR")
-            timeSlot.release(guestCount)
+            cancelReservationSafely(reservationId, "SYSTEM_ERROR")
         } finally {
-            // 데드락 방지: 성공/실패 무관 락 해제
             if (lockAcquired) {
-                lockService.releaseLock(timeSlotId.toString(), lockToken)
+                TransactionSynchronizationManager.registerSynchronization(
+                    object : TransactionSynchronization {
+                        override fun afterCompletion(status: Int) {
+                            lockService.releaseLock(timeSlotIdStr, reservationId.toString())
+                        }
+                    }
+                )
             }
         }
+    }
+    private fun cancelReservationSafely(reservationId: UUID, reason: String) {
+        val reservation = reservationRepository.findByIdOrNull(reservationId) ?: return
+        reservation.cancelReservation(reason)
     }
 }
