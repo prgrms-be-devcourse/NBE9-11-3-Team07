@@ -33,7 +33,7 @@ dependencies {
     implementation("org.springframework.boot:spring-boot-starter-webmvc")
     implementation("org.springframework.boot:spring-boot-starter-webservices")
     implementation("org.springframework.boot:spring-boot-starter-data-redis")
-    implementation("org.redisson:redisson:3.52.0")
+    implementation("org.redisson:redisson:3.44.0")
     implementation("org.springframework.boot:spring-boot-starter-oauth2-client")
     implementation("org.springframework.boot:spring-boot-starter-actuator")
 
