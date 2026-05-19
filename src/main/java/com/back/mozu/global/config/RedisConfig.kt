@@ -51,7 +51,6 @@ class RedisConfig(
         val config = Config()
         config.useSentinelServers()
             .setMasterName(master)
-            .setCheckSentinelsList(false)
             .addSentinelAddress(
                 *nodes.split(",").map { "redis://${it.trim()}" }.toTypedArray()
             )
