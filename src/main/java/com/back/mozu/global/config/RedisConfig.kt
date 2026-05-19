@@ -51,11 +51,7 @@ class RedisConfig(
         val config = Config()
         config.useSentinelServers()
             .setMasterName(master)
-            .setCheckSentinelsList(false) // 추가
-            .setSlaveConnectionMinimumIdleSize(0) // slave 연결 비활성화
-            .setSlaveConnectionPoolSize(0)        // slave 연결 비활성화
-            .setReadMode(org.redisson.config.ReadMode.MASTER) // Master에서만 읽기
-            .setSubscriptionMode(org.redisson.config.SubscriptionMode.MASTER) // Master에서만 구독
+            .setCheckSentinelsList(false)
             .addSentinelAddress(
                 *nodes.split(",").map { "redis://${it.trim()}" }.toTypedArray()
             )
