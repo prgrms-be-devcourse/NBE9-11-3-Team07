@@ -92,13 +92,17 @@ class ReservationAsyncProcessor(
 
         } finally {
             if (lockAcquired) {
-                TransactionSynchronizationManager.registerSynchronization(
-                    object : TransactionSynchronization {
-                        override fun afterCompletion(status: Int) {
-                            lockService.releaseLock(timeSlotIdStr, lockToken)
+                if (TransactionSynchronizationManager.isSynchronizationActive()) {
+                    TransactionSynchronizationManager.registerSynchronization(
+                        object : TransactionSynchronization {
+                            override fun afterCompletion(status: Int) {
+                                lockService.releaseLock(timeSlotIdStr, lockToken)
+                            }
                         }
-                    }
-                )
+                    )
+                } else {
+                    lockService.releaseLock(timeSlotIdStr, lockToken)
+                }
             }
         }
     }
