@@ -5,4 +5,5 @@ scrape_configs:
   - job_name: 'moju-app'
     metrics_path: '/actuator/prometheus'
     static_configs:
-      - targets: ['app:8080'] # docker-compose에 정의한 서비스 이름(app) 사용
+      # mozu-spring 서버 프라이빗 IP로 변경 (멀티 서버 배포 환경)
+      - targets: ['172.31.14.21:8080']
