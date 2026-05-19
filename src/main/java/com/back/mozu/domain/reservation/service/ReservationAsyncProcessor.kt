@@ -21,7 +21,7 @@ class ReservationAsyncProcessor(
     private val timeSlotRepository: TimeSlotRepository,
     private val lockService: LockService,
     private val redisTemplate: RedisTemplate<String, String>,
-    private val reservationStatusService: ReservationStatusService,
+    private val reservationStatusService: ReservationStatusService
 ) {
 
     @Async
@@ -95,7 +95,7 @@ class ReservationAsyncProcessor(
                 reservationId,
                 timeSlotId,
                 guestCount,
-                e,
+                e
             )
             if (stockOccupied) {
                 timeSlotRepository.findByIdWithLock(timeSlotId)?.release(guestCount)
@@ -111,7 +111,7 @@ class ReservationAsyncProcessor(
                             override fun afterCompletion(status: Int) {
                                 lockService.releaseLock(timeSlotIdStr, lockToken)
                             }
-                        },
+                        }
                     )
                 } else {
                     lockService.releaseLock(timeSlotIdStr, lockToken)
