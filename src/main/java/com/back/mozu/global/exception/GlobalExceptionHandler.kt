@@ -61,4 +61,12 @@ class GlobalExceptionHandler {
             "400-4"
         )
     }
+    @ExceptionHandler(IllegalArgumentException::class)
+    @ResponseBody
+    fun handleException(e: IllegalArgumentException): RsData<Void> {
+        return RsData(
+            e.message ?: "잘못된 요청입니다.",
+            "409-1"
+        )
+    }
 }

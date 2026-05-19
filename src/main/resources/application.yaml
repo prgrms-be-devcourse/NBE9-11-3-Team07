@@ -5,10 +5,11 @@ spring:
   profiles:
     active: dev
 
-  data:
+  data:                          # ← 여기로 빼야 해요
     redis:
-      host: localhost
-      port: 6379
+      sentinel:
+        master: mymaster
+        nodes: moju-sentinel-1:26379,moju-sentinel-2:26379,moju-sentinel-3:26379
 
   datasource:
     url: jdbc:mysql://db:3306/moju_db?serverTimezone=Asia/Seoul&useSSL=false&allowPublicKeyRetrieval=true
@@ -40,20 +41,3 @@ spring:
               - email
               - profile
             redirect-uri: http://localhost:8080/login/oauth2/code/google
-
-jwt:
-  secret: thisIsATestSecretKeyForLocalDevelopment123456
-  expiration: 1800000
-  refresh-expiration: 604800000
-
-# 모니터링 설정 (윤현정 추가)
-management:
-  endpoints:
-    web:
-      exposure:
-        include: "prometheus,info,health,metrics"
-  endpoint:
-    prometheus:
-      enabled: true
-    health:
-      show-details: always

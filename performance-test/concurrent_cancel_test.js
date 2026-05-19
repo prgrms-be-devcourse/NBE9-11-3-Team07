@@ -7,7 +7,7 @@ export const options = {
 };
 
 export default function () {
-    const authToken = "eyJhbGciOiJIUzI1NiJ9.eyJ1c2VySWQiOiIzNzBiMDM3Yy0zZjBlLTQ4M2UtYTNlOC0zMjRjOWExNTc3NzUiLCJyb2xlIjoiVVNFUiIsImlhdCI6MTc3NjkxNjMwNiwiZXhwIjoxNzc2OTE4MTA2fQ._TgorL8T9SmDym9V0i06lZHABrbgRLP1LzAmueWtyaA";
+    const authToken = "eyJhbGciOiJIUzI1NiJ9.eyJ1c2VySWQiOiJmMmI5YWM5MC00OGM4LTQ3NWQtYTU2Ni05NDRlYmViODcxOWIiLCJyb2xlIjoiVVNFUiIsImlhdCI6MTc3OTE2MjE3OSwiZXhwIjoxNzc5MTYzOTc5fQ.4n6bFSqKFMtgZIuXiS18J2cYkbTzFuvWKIDC01pSn6A";
 
     const params = {
         headers: {
@@ -16,7 +16,7 @@ export default function () {
         },
     };
 
-    const reservationId = 'f42b7730-3eca-11f1-aaed-0242ac1a0002';
+    const reservationId = 'f42b7730-3eca-11f1-aaed-0242ac1a00ㅌ02';
     const url = `http://localhost:8080/api/v1/my/reservations/${reservationId}/cancel`;
     const payload = JSON.stringify({ cancelReason: 'TEST' });
 
