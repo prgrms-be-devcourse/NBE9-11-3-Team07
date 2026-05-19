@@ -1,11 +1,11 @@
 package com.back.mozu.domain.reservation.service
 
 import com.back.mozu.domain.queue.service.LockService
+import com.back.mozu.domain.reservation.entity.ReservationStatus
 import com.back.mozu.domain.reservation.repository.ReservationRepository
 import com.back.mozu.domain.reservation.repository.TimeSlotRepository
 import org.slf4j.LoggerFactory
 import org.springframework.data.redis.core.RedisTemplate
-import org.springframework.data.repository.findByIdOrNull
 import org.springframework.orm.ObjectOptimisticLockingFailureException
 import org.springframework.scheduling.annotation.Async
 import org.springframework.stereotype.Service
@@ -20,6 +20,7 @@ class ReservationAsyncProcessor(
     private val timeSlotRepository: TimeSlotRepository,
     private val lockService: LockService,
     private val redisTemplate: RedisTemplate<String, String>,
+    private val reservationStatusService: ReservationStatusService
 ) {
 
     @Async
@@ -31,7 +32,7 @@ class ReservationAsyncProcessor(
 
         val isOccupied = redisTemplate.opsForValue().get(occupiedKey)?.toBoolean() ?: false
         if (isOccupied) {
-            cancelReservationSafely(reservationId, "ALREADY_OCCUPIED_FAIL_FAST")
+            reservationStatusService.cancelReservationSafely(reservationId, "ALREADY_OCCUPIED_FAIL_FAST")
             return
         }
 
@@ -41,13 +42,19 @@ class ReservationAsyncProcessor(
         try {
             lockAcquired = lockService.acquireLock(timeSlotIdStr, lockToken)
             if (!lockAcquired) {
-                cancelReservationSafely(reservationId, "LOCK_ACQUIRE_FAIL")
+                reservationStatusService.cancelReservationSafely(reservationId, "LOCK_ACQUIRE_FAIL")
                 return
             }
 
-            val reservation = reservationRepository.findByIdOrNull(reservationId)
+            val reservation = reservationRepository.findByIdWithLock(reservationId)
                 ?: throw IllegalArgumentException("예약 기록을 찾을 수 없습니다.")
-            val timeSlot = timeSlotRepository.findByIdOrNull(timeSlotId)
+
+            if (reservation.status != ReservationStatus.PENDING) {
+                reservationStatusService.cancelReservationSafely(reservationId, "ALREADY_PROCESSED")
+                return
+            }
+
+            val timeSlot = timeSlotRepository.findByIdWithLock(timeSlotId)
                 ?: throw IllegalArgumentException("타임슬롯을 찾을 수 없습니다.")
 
             timeSlot.occupy(guestCount)
@@ -60,17 +67,16 @@ class ReservationAsyncProcessor(
             }
 
         } catch (e: ObjectOptimisticLockingFailureException) {
-            cancelReservationSafely(reservationId, "OPTIMISTIC_LOCK_FAIL")
+            reservationStatusService.cancelReservationSafely(reservationId, "OPTIMISTIC_LOCK_FAIL")
 
         } catch (e: IllegalArgumentException) {
-            cancelReservationSafely(reservationId, "RESERVATION_FAILED")
+            reservationStatusService.cancelReservationSafely(reservationId, "RESERVATION_FAILED")
 
         } catch (e: IllegalStateException) {
             if (stockOccupied) {
-                timeSlotRepository.findByIdOrNull(timeSlotId)?.release(guestCount)
+                timeSlotRepository.findByIdWithLock(timeSlotId)?.release(guestCount)
             }
-            cancelReservationSafely(reservationId, "RESERVATION_FAILED")
-
+            reservationStatusService.cancelReservationSafely(reservationId, "RESERVATION_FAILED")
             redisTemplate.delete(occupiedKey)
 
         } catch (e: Exception) {
@@ -79,10 +85,9 @@ class ReservationAsyncProcessor(
                 reservationId, timeSlotId, guestCount, e,
             )
             if (stockOccupied) {
-                timeSlotRepository.findByIdOrNull(timeSlotId)?.release(guestCount)
+                timeSlotRepository.findByIdWithLock(timeSlotId)?.release(guestCount)
             }
-            cancelReservationSafely(reservationId, "SYSTEM_ERROR")
-
+            reservationStatusService.cancelReservationSafely(reservationId, "SYSTEM_ERROR")
             redisTemplate.delete(occupiedKey)
 
         } finally {
@@ -96,10 +101,6 @@ class ReservationAsyncProcessor(
                 )
             }
         }
-    }
-    private fun cancelReservationSafely(reservationId: UUID, reason: String) {
-        val reservation = reservationRepository.findByIdOrNull(reservationId) ?: return
-        reservation.cancelReservation(reason)
     }
 
     companion object {
