@@ -1,0 +1,7 @@
+FROM redis:7.2
+
+# sentinel.conf를 이미지에 포함
+# resolve-hostnames yes 설정으로 호스트명 그대로 사용 가능
+# volume 마운트 없이 컨테이너 내부 파일 직접 사용
+COPY sentinel.conf /etc/redis/sentinel.conf
+CMD ["redis-sentinel", "/etc/redis/sentinel.conf"]
