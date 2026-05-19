@@ -59,8 +59,12 @@ class ReservationAsyncProcessor(
 
             timeSlot.occupy(guestCount)
             stockOccupied = true
-
             reservation.confirmReservation()
+
+            // R-01 테스트를 위해 트랜잭션 지연 추가
+            log.info("R-01 테스트: 5초 지연 시작 (Thread: {})", Thread.currentThread().name)
+            Thread.sleep(5000)
+            log.info("R-01 테스트: 5초 지연 종료")
 
             if (timeSlot.stock == 0) {
                 redisTemplate.opsForValue().set(occupiedKey, "true")
