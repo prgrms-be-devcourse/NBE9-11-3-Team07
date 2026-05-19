@@ -1,42 +1,75 @@
 package com.back.mozu.domain.queue.service
 
-import com.back.mozu.global.redis.RedisUtil
 import org.slf4j.LoggerFactory
+import org.springframework.data.redis.core.StringRedisTemplate
+import org.springframework.scheduling.annotation.Scheduled
 import org.springframework.stereotype.Service
+import java.time.Duration
+import java.util.concurrent.ConcurrentHashMap
+
+private const val LOCK_TTL_SECONDS = 10L
+private const val WATCHDOG_INTERVAL_MS = 3_000L
+private const val MAX_WATCHDOG_EXTENSIONS = 5
 
 @Service
 class LockService(
-    private val redisUtil: RedisUtil,
+    private val redisTemplate: StringRedisTemplate,
 ) {
-    // 분산 락 설정
-    fun acquireLock(timeSlotId: String, token: String): Boolean {
-        val lockKey = RedisUtil.lockKey(timeSlotId)
-        val isAcquired = redisUtil.lockAcquire(lockKey, token, MAX_LOCK_TIME)
+    private val activeLocks = ConcurrentHashMap<String, Pair<String, Int>>()
 
-        if (isAcquired) {
-            log.info("[Lock 획득 성공] timeSlotId: {}, token: {}", timeSlotId, token)
-        } else {
-            log.warn("[Lock 획득 실패 - 이미 점유됨] timeSlotId: {}, token: {}", timeSlotId, token)
+    fun acquireLock(lockKey: String, lockToken: String): Boolean {
+        val acquired = redisTemplate.opsForValue()
+            .setIfAbsent(lockKey, lockToken, Duration.ofSeconds(LOCK_TTL_SECONDS))
+            ?: false
+
+        if (acquired) {
+            activeLocks[lockKey] = Pair(lockToken, 0)
         }
-
-        return isAcquired
+        return acquired
     }
 
-    // 분산 락 해제
-    fun releaseLock(timeSlotId: String, token: String) {
-        val lockKey = RedisUtil.lockKey(timeSlotId)
+    fun releaseLock(lockKey: String, lockToken: String) {
+        val currentToken = redisTemplate.opsForValue().get(lockKey)
 
-        // RedisUtil 내부의 Lua 스크립트를 통해 내 토큰일 경우 삭제
-        redisUtil.lockRelease(lockKey, token)
+        if (currentToken == lockToken) {
+            redisTemplate.delete(lockKey)
+            log.info("[Lock 해제 완료] lockKey: {}, lockToken: {}", lockKey, lockToken)
+        } else {
+            log.warn("[Lock 해제 실패 - 현재 스레드가 소유하지 않음] lockKey: {}, lockToken: {}", lockKey, lockToken)
+        }
 
-        log.info("[Lock 해제 완료] timeSlotId: {}, token: {}", timeSlotId, token)
+        activeLocks.remove(lockKey)
+    }
+
+    @Scheduled(fixedDelay = WATCHDOG_INTERVAL_MS)
+    fun renewActiveLocks() {
+        activeLocks.forEach { (lockKey, tokenAndCount) ->
+            val (lockToken, extensionCount) = tokenAndCount
+
+            if (extensionCount >= MAX_WATCHDOG_EXTENSIONS) {
+                log.warn(
+                    "Watchdog 최대 연장 횟수 초과. Lock 강제 만료 예정: lockKey={}, extensionCount={}",
+                    lockKey, extensionCount,
+                )
+                activeLocks.remove(lockKey)
+                return@forEach
+            }
+
+            val currentToken = redisTemplate.opsForValue().get(lockKey)
+            if (currentToken == lockToken) {
+                redisTemplate.expire(lockKey, Duration.ofSeconds(LOCK_TTL_SECONDS))
+                activeLocks[lockKey] = Pair(lockToken, extensionCount + 1)
+                log.debug(
+                    "Lock TTL 연장: lockKey={}, extensionCount={}/{}",
+                    lockKey, extensionCount + 1, MAX_WATCHDOG_EXTENSIONS,
+                )
+            } else {
+                activeLocks.remove(lockKey)
+            }
+        }
     }
 
     companion object {
         private val log = LoggerFactory.getLogger(LockService::class.java)
-
-        // 락의 최대 유지 시간: 3초
-        // 최대 유지 시간 내에 작업 처리 미완료 시 데드락 방지를 위해 자동으로 락이 해제
-        private const val MAX_LOCK_TIME = 3_000L
     }
 }
