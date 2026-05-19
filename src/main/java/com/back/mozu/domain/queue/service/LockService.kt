@@ -30,9 +30,14 @@ class LockService(
 
     fun releaseLock(lockKey: String, lockToken: String) {
         val currentToken = redisTemplate.opsForValue().get(lockKey)
+
         if (currentToken == lockToken) {
             redisTemplate.delete(lockKey)
+            log.info("[Lock 해제 완료] lockKey: {}, lockToken: {}", lockKey, lockToken)
+        } else {
+            log.warn("[Lock 해제 실패 - 현재 스레드가 소유하지 않음] lockKey: {}, lockToken: {}", lockKey, lockToken)
         }
+
         activeLocks.remove(lockKey)
     }
 
