@@ -45,7 +45,7 @@ spring:
             redirect-uri: http://localhost:8080/login/oauth2/code/google
 
 jwt:
-  secret: thisIsATestSecretKeyForLocalDevelopment123456
+  secret: ${JWT_SECRET:thisIsATestSecretKeyForLocalDevelopment123456}
   expiration: 1800000
   refresh-expiration: 604800000
 

@@ -18,6 +18,6 @@ services:
       - GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID}
       - GOOGLE_CLIENT_SECRET=${GOOGLE_CLIENT_SECRET}
       # JWT 설정
-      - JWT_SECRET=thisIsATestSecretKeyForLocalDevelopment123456
+      - JWT_SECRET=${JWT_SECRET:thisIsATestSecretKeyForLocalDevelopment123456}
       - JWT_EXPIRATION=1800000
       - JWT_REFRESH_EXPIRATION=604800000
