@@ -2,11 +2,11 @@ spring:
   data:
     redis:
       sentinel:
-        master: mymaster
-        nodes:
-          - localhost:26379
-          - localhost:26380
-          - localhost:26381
+        master: ${SPRING_DATA_REDIS_SENTINEL_MASTER:mymaster}
+        nodes: ${SPRING_DATA_REDIS_SENTINEL_NODES:localhost:26379,localhost:26380,localhost:26381}
 
   datasource:
     url: jdbc:mysql://localhost:3306/moju_db?serverTimezone=Asia/Seoul&useSSL=false&allowPublicKeyRetrieval=true
+    username: root
+    password: root
+    driver-class-name: com.mysql.cj.jdbc.Driver

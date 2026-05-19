@@ -103,6 +103,11 @@ services:
       - SPRING_DATASOURCE_URL=jdbc:mysql://db:3306/moju_db?useSSL=false&allowPublicKeyRetrieval=true
       - GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID}
       - GOOGLE_CLIENT_SECRET=${GOOGLE_CLIENT_SECRET}
+      - SPRING_DATA_REDIS_SENTINEL_MASTER=mymaster
+      - SPRING_DATA_REDIS_SENTINEL_NODES=moju-sentinel-1:26379,moju-sentinel-2:26379,moju-sentinel-3:26379
+      - JWT_SECRET=thisIsATestSecretKeyForLocalDevelopment123456
+      - JWT_EXPIRATION=1800000
+      - JWT_REFRESH_EXPIRATION=604800000
     depends_on:
       - db
       - redis-master
