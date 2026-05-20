@@ -51,26 +51,7 @@
 
 ## 아키텍처
 
-```
-일반 유저 / 관리자
-    ↓
-Google OAuth2 (SSO) / ID·PW
-    ↓
-JWT 발급 (Spring Boot)
-    ↓
-Spring Boot :8080
-├── Redisson 분산락 · 낙관적락(@Version)
-└── 동시성 제어 (분산락 1차 · 낙관적락 2차 · Fail-Fast)
-    ↓
-Redis Master :6379 · Sentinel-1
-Redis Replica :6380 · Sentinel-2
-Sentinel-3 :26381 · 과반수 투표
-    ↓ (Master 장애 → Sentinel 2/3 투표 → Replica 자동 승격)
-MySQL :3306 (예약 · 유저 데이터)
-
-모니터링: Prometheus :9090 → Grafana :3001
-부하 테스트: InfluxDB :8086 ← k6
-```
+<img width="526" height="471" alt="Image" src="https://github.com/user-attachments/assets/f4f55ae2-9566-4511-8ce6-f1ee51dfc630" />
 
 ---
 
