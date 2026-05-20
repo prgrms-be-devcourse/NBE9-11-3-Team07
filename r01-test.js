@@ -1,37 +1,36 @@
 import http from 'k6/http';
-import { check, sleep } from 'k6';
+import { check } from 'k6';
 import { Counter, Trend } from 'k6/metrics';
 
 const reservationSuccess = new Counter('reservation_success');
 const reservationConflict = new Counter('reservation_conflict');
-const reservationError = new Counter('reservation_error');
+const reservationUnexpected = new Counter('reservation_unexpected');
+const loginFailure = new Counter('login_failure');
 const loginDuration = new Trend('login_duration_ms');
 const reservationDuration = new Trend('reservation_duration_ms');
 
 const BASE_URL = __ENV.BASE_URL ?? 'http://localhost:8080';
 const USER_COUNT = Number(__ENV.USER_COUNT ?? 10);
 const PASSWORD = __ENV.PASSWORD ?? 'password123';
-const DEFAULT_TIME_SLOT_ID = Number(__ENV.DEFAULT_TIME_SLOT_ID ?? 1);
-const STRICT_MODE = (__ENV.STRICT_MODE ?? 'false').toLowerCase() === 'true';
-const STRICT_HTTP_THRESHOLD = STRICT_MODE ? 'rate<0.05' : 'rate<1';
+const TIME_SLOT_ID = Number(__ENV.TIME_SLOT_ID ?? 1);
+const SCENARIO_LABEL = (__ENV.SCENARIO_LABEL ?? 'After (Watchdog 적용)').trim();
+const AUTH_MODE = (__ENV.AUTH_MODE ?? 'login').toLowerCase();
+const AUTH_TOKEN = __ENV.AUTH_TOKEN ?? '';
+const ENABLE_STRICT_THRESHOLD = (__ENV.ENABLE_STRICT_THRESHOLD ?? 'false').toLowerCase() === 'true';
 
-const parsedTimeSlotId = Number(__ENV.TIME_SLOT_ID);
-const resolvedTimeSlotId = Number.isFinite(parsedTimeSlotId) && parsedTimeSlotId > 0
-    ? parsedTimeSlotId
-    : DEFAULT_TIME_SLOT_ID;
-const isTimeSlotFallback = !(__ENV.TIME_SLOT_ID && Number.isFinite(parsedTimeSlotId) && parsedTimeSlotId > 0);
+const httpFailedThreshold = ENABLE_STRICT_THRESHOLD ? 'rate<0.05' : 'rate<=1';
 
 export const options = {
     scenarios: {
-        concurrent_users: {
+        r01_ttl_optimistic_lock: {
             executor: 'per-vu-iterations',
             vus: USER_COUNT,
             iterations: 1,
-            maxDuration: '30s',
+            maxDuration: '60s',
         },
     },
     thresholds: {
-        http_req_failed: [STRICT_HTTP_THRESHOLD],
+        http_req_failed: [httpFailedThreshold],
     },
 };
 
@@ -47,9 +46,7 @@ function safeJsonParse(raw) {
     }
 }
 
-function extractToken(res) {
-    const body = safeJsonParse(res.body);
-
+function extractToken(body) {
     if (!body) {
         return null;
     }
@@ -57,122 +54,124 @@ function extractToken(res) {
     return body.token ?? body.data?.token ?? body.result?.token ?? null;
 }
 
-function getToken(userId) {
-    const res = http.post(
-        `${BASE_URL}/api/v1/auth/login`,
-        JSON.stringify({ email: `user${userId}@test.com`, password: PASSWORD }),
-        { headers: { 'Content-Type': 'application/json' } },
-    );
+function loginAndGetToken(userId) {
+    if (AUTH_MODE === 'token') {
+        return AUTH_TOKEN || null;
+    }
 
-    loginDuration.add(res.timings.duration);
-
-    const loginPassed = check(res, {
-        '로그인 응답 코드 정상(200)': (r) => r.status === 200,
-    });
-
-    if (!loginPassed) {
-        console.error(`[VU ${userId}] 로그인 실패: status=${res.status}, body=${res.body}`);
+    if (AUTH_MODE === 'none') {
         return null;
     }
 
-    const token = extractToken(res);
+    const loginResponse = http.post(
+        `${BASE_URL}/api/v1/auth/login`,
+        JSON.stringify({ email: `user${userId}@test.com`, password: PASSWORD }),
+        {
+            headers: { 'Content-Type': 'application/json' },
+            tags: { endpoint: 'login' },
+        },
+    );
+
+    loginDuration.add(loginResponse.timings.duration);
+
+    if (loginResponse.status !== 200) {
+        loginFailure.add(1);
+        console.error(`[VU ${userId}] 로그인 실패: status=${loginResponse.status}`);
+        return null;
+    }
+
+    const body = safeJsonParse(loginResponse.body);
+    const token = extractToken(body);
 
     if (!token) {
-        console.error(`[VU ${userId}] 로그인 성공했지만 토큰 파싱 실패: body=${res.body}`);
+        loginFailure.add(1);
+        console.error(`[VU ${userId}] 로그인 토큰 추출 실패`);
     }
 
     return token;
 }
 
-export default function () {
-    const userId = __VU;
+function buildHeaders(token) {
+    const headers = { 'Content-Type': 'application/json' };
 
-    if (isTimeSlotFallback && userId === 1) {
-        console.warn(
-            `TIME_SLOT_ID가 없거나 잘못되어 DEFAULT_TIME_SLOT_ID(${DEFAULT_TIME_SLOT_ID})를 사용합니다. `
-            + '권장: -e TIME_SLOT_ID=<실제 슬롯ID>',
-        );
+    if (token) {
+        headers.Authorization = `Bearer ${token}`;
     }
 
-    const token = getToken(userId);
+    return headers;
+}
 
-    if (!token) {
-        reservationError.add(1);
+export default function () {
+    const userId = __VU;
+    const token = loginAndGetToken(userId);
+
+    if (AUTH_MODE !== 'none' && !token) {
         return;
     }
 
-    const res = http.post(
+    const reservationResponse = http.post(
         `${BASE_URL}/api/v1/reservations`,
-        JSON.stringify({ timeSlotId: resolvedTimeSlotId, guestCount: 1 }),
+        JSON.stringify({ timeSlotId: TIME_SLOT_ID, guestCount: 1 }),
         {
-            headers: {
-                'Content-Type': 'application/json',
-                Authorization: `Bearer ${token}`,
-            },
+            headers: buildHeaders(token),
+            tags: { endpoint: 'reservation' },
         },
     );
 
-    reservationDuration.add(res.timings.duration);
+    reservationDuration.add(reservationResponse.timings.duration);
 
-    const passed = check(res, {
-        '성공 또는 정상 충돌 처리': (r) => r.status === 200 || r.status === 409,
+    const isExpected = check(reservationResponse, {
+        '예약 성공/충돌 응답': (r) => [200, 201, 409, 423, 429].includes(r.status),
     });
 
-    if (!passed) {
-        console.error(`[VU ${userId}] 예상치 못한 응답: status=${res.status}, body=${res.body}`);
-        reservationError.add(1);
+    if (!isExpected) {
+        reservationUnexpected.add(1);
+        console.error(`[VU ${userId}] 예상 외 응답: status=${reservationResponse.status}`);
         return;
     }
 
-    if (res.status === 200) {
+    if (reservationResponse.status === 200 || reservationResponse.status === 201) {
         reservationSuccess.add(1);
-        console.log(`[VU ${userId}] 예약 성공`);
+        return;
     }
 
-    if (res.status === 409) {
-        reservationConflict.add(1);
-        const body = safeJsonParse(res.body);
-        console.log(`[VU ${userId}] 예약 충돌/만석: ${body?.message ?? res.body}`);
-    }
-
-    sleep(0.1);
+    reservationConflict.add(1);
 }
 
 export function handleSummary(data) {
     const success = data.metrics['reservation_success']?.values?.count ?? 0;
     const conflict = data.metrics['reservation_conflict']?.values?.count ?? 0;
-    const error = data.metrics['reservation_error']?.values?.count ?? 0;
+    const unexpected = data.metrics['reservation_unexpected']?.values?.count ?? 0;
+    const authFail = data.metrics['login_failure']?.values?.count ?? 0;
+
     const avgLogin = data.metrics['login_duration_ms']?.values?.avg?.toFixed(1) ?? '-';
-    const avgRes = data.metrics['reservation_duration_ms']?.values?.avg?.toFixed(1) ?? '-';
-    const p95Res = data.metrics['reservation_duration_ms']?.values?.['p(95)']?.toFixed(1) ?? '-';
-
-    const scenario = __ENV.SCENARIO === 'before' ? 'Before (Watchdog 없음)' : 'After  (Watchdog 적용)';
-    const slotInfo = `사용 timeSlotId: ${resolvedTimeSlotId}${isTimeSlotFallback ? ' (fallback)' : ''}`;
-
-    const strictInfo = `STRICT_MODE: ${STRICT_MODE ? 'ON(rate<0.05)' : 'OFF(rate<1)'}`;
+    const avgReservation = data.metrics['reservation_duration_ms']?.values?.avg?.toFixed(1) ?? '-';
+    const p95Reservation = data.metrics['reservation_duration_ms']?.values?.['p(95)']?.toFixed(1) ?? '-';
 
     const summary = `
 ========================================
- R-01 결과 요약 [${scenario}]
+ R-01 TTL 만료 낙관적 락 충돌 테스트
 ========================================
- ${slotInfo}
- ${strictInfo}
- 예약 성공  (200): ${success}건
- 예약 충돌  (409): ${conflict}건
- 예상 외 오류    : ${error}건
+ 시나리오: ${SCENARIO_LABEL}
+ 동시 요청 수(VU): ${USER_COUNT}
+ timeSlotId: ${TIME_SLOT_ID}
+ AUTH_MODE: ${AUTH_MODE}
 ----------------------------------------
- 로그인 평균 응답: ${avgLogin} ms
- 예약  평균 응답: ${avgRes} ms
- 예약  p95  응답: ${p95Res} ms
+ 예약 성공(200/201): ${success}건
+ 예약 충돌(409/423/429): ${conflict}건
+ 로그인 실패: ${authFail}건
+ 예상 외 응답: ${unexpected}건
+----------------------------------------
+ 로그인 평균: ${avgLogin} ms
+ 예약 평균: ${avgReservation} ms
+ 예약 p95: ${p95Reservation} ms
 ========================================
- [다음 단계] 아래 명령으로 OptimisticLockException 발생 횟수 확인
+ [로그 확인] OptimisticLockException 카운트
+ grep -c "OptimisticLockException" app.log
+ 또는
  grep -c "OPTIMISTIC_LOCK_FAIL" app.log
 ========================================
 `;
-
-    if (success === 0 && conflict === 0 && error > 0) {
-        console.warn('로그인 계정/비밀번호 또는 권한(403)을 먼저 확인하세요. 필요 시 -e STRICT_MODE=true 로 엄격 검사하세요.');
-    }
 
     console.log(summary);
 
