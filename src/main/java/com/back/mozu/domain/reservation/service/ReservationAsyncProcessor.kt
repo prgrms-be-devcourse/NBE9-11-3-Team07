@@ -1,9 +1,9 @@
 package com.back.mozu.domain.reservation.service
 
-import com.back.mozu.domain.queue.service.LockService
 import com.back.mozu.domain.reservation.entity.ReservationStatus
 import com.back.mozu.domain.reservation.repository.ReservationRepository
 import com.back.mozu.domain.reservation.repository.TimeSlotRepository
+import org.redisson.api.RedissonClient
 import org.slf4j.LoggerFactory
 import org.springframework.data.redis.core.RedisTemplate
 import org.springframework.orm.ObjectOptimisticLockingFailureException
@@ -13,12 +13,13 @@ import org.springframework.transaction.annotation.Transactional
 import org.springframework.transaction.support.TransactionSynchronization
 import org.springframework.transaction.support.TransactionSynchronizationManager
 import java.util.UUID
+import java.util.concurrent.TimeUnit
 
 @Service
 class ReservationAsyncProcessor(
     private val reservationRepository: ReservationRepository,
     private val timeSlotRepository: TimeSlotRepository,
-    private val lockService: LockService,
+    private val redissonClient: RedissonClient,
     private val redisTemplate: RedisTemplate<String, String>,
     private val reservationStatusService: ReservationStatusService
 ) {
@@ -27,8 +28,8 @@ class ReservationAsyncProcessor(
     @Transactional(noRollbackFor = [IllegalStateException::class])
     fun processReservation(reservationId: UUID, timeSlotId: UUID, guestCount: Int) {
         val timeSlotIdStr = timeSlotId.toString()
-        val lockToken = reservationId.toString()
         val occupiedKey = "isOccupied:$timeSlotIdStr"
+        val lockKey = "lock:timeslot:$timeSlotIdStr"
 
         val isOccupied = redisTemplate.opsForValue().get(occupiedKey)?.toBoolean() ?: false
         if (isOccupied) {
@@ -38,9 +39,11 @@ class ReservationAsyncProcessor(
 
         var lockAcquired = false
         var stockOccupied = false
+        val lock = redissonClient.getLock(lockKey)
 
         try {
-            lockAcquired = lockService.acquireLock(timeSlotIdStr, lockToken)
+            lockAcquired = lock.tryLock(5, -1, TimeUnit.SECONDS)
+
             if (!lockAcquired) {
                 reservationStatusService.cancelReservationSafely(reservationId, "LOCK_ACQUIRE_FAIL")
                 return
@@ -96,12 +99,17 @@ class ReservationAsyncProcessor(
                     TransactionSynchronizationManager.registerSynchronization(
                         object : TransactionSynchronization {
                             override fun afterCompletion(status: Int) {
-                                lockService.releaseLock(timeSlotIdStr, lockToken)
+                                if (lock.isLocked && lock.isHeldByCurrentThread) {
+                                    lock.unlock()
+                                    log.debug("Transaction 커밋 후 Redisson 락 해제 완료: {}", lockKey)
+                                }
                             }
                         }
                     )
                 } else {
-                    lockService.releaseLock(timeSlotIdStr, lockToken)
+                    if (lock.isLocked && lock.isHeldByCurrentThread) {
+                        lock.unlock()
+                    }
                 }
             }
         }
