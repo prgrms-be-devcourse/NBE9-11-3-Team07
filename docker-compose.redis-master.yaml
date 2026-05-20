@@ -1,0 +1,29 @@
+services:
+  # Redis Master: 실제 데이터 읽기/쓰기 담당
+  redis-master:
+    image: redis:7.2
+    container_name: moju-redis-master
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  # Sentinel-1: Master/Replica 상태 감시 (3대 중 1번)
+  # ANNOUNCE_IP: 이 서버(mozu-redis-master)의 프라이빗 IP
+  # Sentinel끼리 통신할 때 자기 IP를 알려줘야 함
+  sentinel-1:
+    build:
+      context: .
+      dockerfile: Dockerfile.sentinel
+    container_name: moju-sentinel-1
+    ports:
+      - "26379:26379"
+    environment:
+      - ANNOUNCE_IP=172.31.10.231
+    restart: on-failure
+    depends_on:
+      redis-master:
+        condition: service_healthy
