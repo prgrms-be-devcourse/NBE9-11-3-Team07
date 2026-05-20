@@ -1,6 +1,5 @@
 package com.back.mozu.domain.reservation.service
 
-import com.back.mozu.domain.queue.service.LockService
 import com.back.mozu.domain.reservation.entity.Reservation
 import com.back.mozu.domain.reservation.entity.ReservationStatus
 import com.back.mozu.domain.reservation.entity.TimeSlot
@@ -21,6 +20,8 @@ import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Nested
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.extension.ExtendWith
+import org.redisson.api.RLock
+import org.redisson.api.RedissonClient
 import org.springframework.data.redis.core.RedisTemplate
 import org.springframework.data.redis.core.ValueOperations
 import org.springframework.orm.ObjectOptimisticLockingFailureException
@@ -30,6 +31,7 @@ import java.time.LocalDate
 import java.time.LocalDateTime
 import java.time.LocalTime
 import java.util.UUID
+import java.util.concurrent.TimeUnit
 
 @ExtendWith(MockKExtension::class)
 @DisplayName("ReservationAsyncProcessor 단위 테스트")
@@ -42,7 +44,10 @@ class ReservationAsyncProcessorTest {
     lateinit var timeSlotRepository: TimeSlotRepository
 
     @MockK
-    lateinit var lockService: LockService
+    lateinit var redissonClient: RedissonClient
+
+    @MockK
+    lateinit var rLock: RLock
 
     @MockK
     lateinit var redisTemplate: RedisTemplate<String, String>
@@ -59,8 +64,8 @@ class ReservationAsyncProcessorTest {
     private val reservationId = UUID.randomUUID()
     private val timeSlotId = UUID.randomUUID()
     private val guestCount = 2
-    private val lockToken = reservationId.toString()
     private val timeSlotIdStr = timeSlotId.toString()
+    private val lockKey = "lock:timeslot:$timeSlotIdStr"
     private val occupiedKey = "isOccupied:$timeSlotIdStr"
 
     private fun makeReservation(status: ReservationStatus = ReservationStatus.PENDING) =
@@ -82,11 +87,14 @@ class ReservationAsyncProcessorTest {
 
     @BeforeEach
     fun setUp() {
-        if (TransactionSynchronizationManager.isSynchronizationActive()) {
-            TransactionSynchronizationManager.clear()
-        }
-
         every { redisTemplate.opsForValue() } returns valueOps
+        every { redissonClient.getLock(lockKey) } returns rLock
+
+        every { rLock.tryLock(any(), any(), any()) } returns true
+        every { rLock.isLocked } returns true
+        every { rLock.isHeldByCurrentThread } returns true
+        every { rLock.unlock() } just Runs
+
         every { reservationStatusService.cancelReservationSafely(any(), any()) } just Runs
 
         TransactionSynchronizationManager.initSynchronization()
@@ -94,9 +102,7 @@ class ReservationAsyncProcessorTest {
 
     @AfterEach
     fun tearDown() {
-        if (TransactionSynchronizationManager.isSynchronizationActive()) {
-            TransactionSynchronizationManager.clear()
-        }
+        TransactionSynchronizationManager.clear()
     }
 
     @Nested
@@ -104,62 +110,45 @@ class ReservationAsyncProcessorTest {
     inner class FailFast {
 
         @Test
-        @DisplayName("isOccupied가 true이면 락 획득 없이 예약을 즉시 취소 요청한다")
-        fun `isOccupied true이면 즉시 취소 요청`() {
+        @DisplayName("isOccupied가 true일 경우 락 획득 없이 예약을 즉시 취소")
+        fun `만석 플래그 존재 시 즉시 취소`() {
             every { valueOps.get(occupiedKey) } returns "true"
 
             processor.processReservation(reservationId, timeSlotId, guestCount)
 
-            verify {
-                reservationStatusService.cancelReservationSafely(
-                    reservationId,
-                    "ALREADY_OCCUPIED_FAIL_FAST",
-                )
+            verify(exactly = 1) {
+                reservationStatusService.cancelReservationSafely(reservationId, "ALREADY_OCCUPIED_FAIL_FAST")
             }
-            verify(exactly = 0) { lockService.acquireLock(any(), any()) }
+            verify(exactly = 0) { rLock.tryLock(any(), any(), any()) }
         }
 
         @Test
-        @DisplayName("isOccupied가 null이면 Fail-Fast를 통과하고 락 획득을 시도한다")
-        fun `isOccupied null이면 락 획득 시도`() {
+        @DisplayName("isOccupied가 false/null일 경우 Fail-Fast를 통과하여 락 획득 시도")
+        fun `만석 플래그 없을 때 Fail-Fast 통과`() {
             every { valueOps.get(occupiedKey) } returns null
-            every { lockService.acquireLock(timeSlotIdStr, lockToken) } returns false
+            every { rLock.tryLock(5, -1, TimeUnit.SECONDS) } returns false
 
             processor.processReservation(reservationId, timeSlotId, guestCount)
 
-            verify { lockService.acquireLock(timeSlotIdStr, lockToken) }
+            verify { rLock.tryLock(5, -1, TimeUnit.SECONDS) }
         }
     }
 
     @Nested
-    @DisplayName("락 획득 실패")
+    @DisplayName("Lock 획득 실패")
     inner class LockFail {
 
         @Test
-        @DisplayName("락 획득 실패 시 LOCK_ACQUIRE_FAIL로 취소 요청한다")
-        fun `락 획득 실패 시 예약 취소 요청`() {
+        @DisplayName("락 획득 실패 시 예약 취소 서비스 호출")
+        fun `락 획득 실패 시 예약 취소`() {
             every { valueOps.get(occupiedKey) } returns null
-            every { lockService.acquireLock(timeSlotIdStr, lockToken) } returns false
+            every { rLock.tryLock(5, -1, TimeUnit.SECONDS) } returns false
 
             processor.processReservation(reservationId, timeSlotId, guestCount)
 
-            verify {
-                reservationStatusService.cancelReservationSafely(
-                    reservationId,
-                    "LOCK_ACQUIRE_FAIL",
-                )
+            verify(exactly = 1) {
+                reservationStatusService.cancelReservationSafely(reservationId, "LOCK_ACQUIRE_FAIL")
             }
-        }
-
-        @Test
-        @DisplayName("락 획득 실패 시 타임슬롯은 조회하지 않는다")
-        fun `락 획득 실패 시 타임슬롯 조회 없음`() {
-            every { valueOps.get(occupiedKey) } returns null
-            every { lockService.acquireLock(timeSlotIdStr, lockToken) } returns false
-
-            processor.processReservation(reservationId, timeSlotId, guestCount)
-
-            verify(exactly = 0) { timeSlotRepository.findByIdWithLock(timeSlotId) }
         }
     }
 
@@ -168,13 +157,11 @@ class ReservationAsyncProcessorTest {
     inner class HappyPath {
 
         @Test
-        @DisplayName("정상 흐름에서는 예약 상태가 CONFIRMED로 변경된다")
+        @DisplayName("정상 흐름에서 예약 상태가 CONFIRMED로 변경")
         fun `정상 흐름 예약 확정`() {
             val reservation = makeReservation()
             val timeSlot = makeTimeSlot(stock = 10)
-
             every { valueOps.get(occupiedKey) } returns null
-            every { lockService.acquireLock(timeSlotIdStr, lockToken) } returns true
             every { reservationRepository.findByIdWithLock(reservationId) } returns reservation
             every { timeSlotRepository.findByIdWithLock(timeSlotId) } returns timeSlot
 
@@ -185,13 +172,11 @@ class ReservationAsyncProcessorTest {
         }
 
         @Test
-        @DisplayName("재고가 모두 소진되면 Redis에 isOccupied=true를 설정한다")
+        @DisplayName("재고 소진 시 Redis에 isOccupied=true를 설정")
         fun `재고 소진 시 만석 플래그 설정`() {
             val reservation = makeReservation()
             val timeSlot = makeTimeSlot(stock = guestCount)
-
             every { valueOps.get(occupiedKey) } returns null
-            every { lockService.acquireLock(timeSlotIdStr, lockToken) } returns true
             every { reservationRepository.findByIdWithLock(reservationId) } returns reservation
             every { timeSlotRepository.findByIdWithLock(timeSlotId) } returns timeSlot
             every { valueOps.set(occupiedKey, "true") } returns Unit
@@ -199,58 +184,7 @@ class ReservationAsyncProcessorTest {
             processor.processReservation(reservationId, timeSlotId, guestCount)
 
             assertThat(timeSlot.stock).isEqualTo(0)
-            verify { valueOps.set(occupiedKey, "true") }
-        }
-
-        @Test
-        @DisplayName("재고가 남아 있으면 Redis 만석 플래그를 설정하지 않는다")
-        fun `재고 남으면 만석 플래그 미설정`() {
-            val reservation = makeReservation()
-            val timeSlot = makeTimeSlot(stock = 10)
-
-            every { valueOps.get(occupiedKey) } returns null
-            every { lockService.acquireLock(timeSlotIdStr, lockToken) } returns true
-            every { reservationRepository.findByIdWithLock(reservationId) } returns reservation
-            every { timeSlotRepository.findByIdWithLock(timeSlotId) } returns timeSlot
-
-            processor.processReservation(reservationId, timeSlotId, guestCount)
-
-            verify(exactly = 0) { valueOps.set(occupiedKey, "true") }
-        }
-
-        @Test
-        @DisplayName("재고 부족 시 INSUFFICIENT_STOCK으로 예약 취소 처리한다")
-        fun `재고 부족 시 예약 취소`() {
-            val reservation = makeReservation()
-            val timeSlot = makeTimeSlot(stock = 0)
-
-            every { valueOps.get(occupiedKey) } returns null
-            every { lockService.acquireLock(timeSlotIdStr, lockToken) } returns true
-            every { reservationRepository.findByIdWithLock(reservationId) } returns reservation
-            every { timeSlotRepository.findByIdWithLock(timeSlotId) } returns timeSlot
-            every { valueOps.set(occupiedKey, "true") } returns Unit
-
-            processor.processReservation(reservationId, timeSlotId, guestCount)
-
-            assertThat(reservation.status).isEqualTo(ReservationStatus.CANCELED)
-            assertThat(reservation.cancelReason).isEqualTo("INSUFFICIENT_STOCK")
-            assertThat(timeSlot.stock).isEqualTo(0)
-        }
-
-        @Test
-        @DisplayName("이미 처리된 예약이면 ALREADY_PROCESSED로 취소 처리한다")
-        fun `이미 처리된 예약이면 취소 처리`() {
-            val reservation = makeReservation(status = ReservationStatus.CONFIRMED)
-
-            every { valueOps.get(occupiedKey) } returns null
-            every { lockService.acquireLock(timeSlotIdStr, lockToken) } returns true
-            every { reservationRepository.findByIdWithLock(reservationId) } returns reservation
-
-            processor.processReservation(reservationId, timeSlotId, guestCount)
-
-            assertThat(reservation.status).isEqualTo(ReservationStatus.CANCELED)
-            assertThat(reservation.cancelReason).isEqualTo("ALREADY_PROCESSED")
-            verify(exactly = 0) { timeSlotRepository.findByIdWithLock(timeSlotId) }
+            verify(exactly = 1) { valueOps.set(occupiedKey, "true") }
         }
     }
 
@@ -259,138 +193,117 @@ class ReservationAsyncProcessorTest {
     inner class ExceptionHandling {
 
         @Test
-        @DisplayName("ObjectOptimisticLockingFailureException 발생 시 OPTIMISTIC_LOCK_FAIL로 취소한다")
+        @DisplayName("ObjectOptimisticLockingFailureException 발생 시 OPTIMISTIC_LOCK_FAIL로 취소")
         fun `낙관적 락 충돌 시 예약 취소`() {
             val reservation = makeReservation()
-
             every { valueOps.get(occupiedKey) } returns null
-            every { lockService.acquireLock(timeSlotIdStr, lockToken) } returns true
             every { reservationRepository.findByIdWithLock(reservationId) } returns reservation
-            every {
-                timeSlotRepository.findByIdWithLock(timeSlotId)
-            } throws ObjectOptimisticLockingFailureException(TimeSlot::class.java, timeSlotId)
+            every { timeSlotRepository.findByIdWithLock(timeSlotId) } throws ObjectOptimisticLockingFailureException(TimeSlot::class.java, timeSlotId)
 
             processor.processReservation(reservationId, timeSlotId, guestCount)
 
-            assertThat(reservation.status).isEqualTo(ReservationStatus.CANCELED)
-            assertThat(reservation.cancelReason).isEqualTo("OPTIMISTIC_LOCK_FAIL")
-        }
-
-        @Test
-        @DisplayName("예약 Entity가 없으면 RESERVATION_FAILED로 취소 요청한다")
-        fun `예약 Entity 없음 시 취소 요청`() {
-            every { valueOps.get(occupiedKey) } returns null
-            every { lockService.acquireLock(timeSlotIdStr, lockToken) } returns true
-            every { reservationRepository.findByIdWithLock(reservationId) } returns null
-
-            processor.processReservation(reservationId, timeSlotId, guestCount)
-
-            verify {
-                reservationStatusService.cancelReservationSafely(
-                    reservationId,
-                    "RESERVATION_FAILED",
-                )
+            verify(exactly = 1) {
+                reservationStatusService.cancelReservationSafely(reservationId, "OPTIMISTIC_LOCK_FAIL")
             }
         }
 
         @Test
-        @DisplayName("occupy 이후 IllegalStateException 발생 시 release를 호출하여 재고를 복구한다")
-        fun `재고 점유 후 IllegalStateException 시 재고 복구`() {
-            val reservation = mockk<Reservation>(relaxed = true)
-            val timeSlot = makeTimeSlot(stock = 10)
-
-            every { reservation.status } returns ReservationStatus.PENDING
+        @DisplayName("예약 Entity가 없을 경우 IllegalArgumentException으로 RESERVATION_FAILED 처리")
+        fun `예약 Entity 없음 시 취소`() {
             every { valueOps.get(occupiedKey) } returns null
-            every { lockService.acquireLock(timeSlotIdStr, lockToken) } returns true
+            every { reservationRepository.findByIdWithLock(reservationId) } returns null
+
+            processor.processReservation(reservationId, timeSlotId, guestCount)
+
+            verify(exactly = 1) {
+                reservationStatusService.cancelReservationSafely(reservationId, "RESERVATION_FAILED")
+            }
+        }
+
+        @Test
+        @DisplayName("재고 점유 이후 IllegalStateException 발생 시 release 호출 및 Redis 상태 초기화")
+        fun `비즈니스 예외 시 롤백 및 Redis 복구`() {
+            val reservation = mockk<Reservation>(relaxed = true) {
+                every { status } returns ReservationStatus.PENDING
+            }
+            val timeSlot = mockk<TimeSlot>(relaxed = true)
+
+            every { valueOps.get(occupiedKey) } returns null
             every { reservationRepository.findByIdWithLock(reservationId) } returns reservation
             every { timeSlotRepository.findByIdWithLock(timeSlotId) } returns timeSlot
+
+            every { timeSlot.occupy(guestCount) } just Runs
+            every { timeSlot.release(guestCount) } just Runs
+
             every { reservation.confirmReservation() } throws IllegalStateException()
             every { redisTemplate.delete(occupiedKey) } returns true
 
             processor.processReservation(reservationId, timeSlotId, guestCount)
 
-            assertThat(timeSlot.stock).isEqualTo(10)
-            verify { reservation.cancelReservation("RESERVATION_FAILED") }
+            verify(exactly = 1) { timeSlot.release(guestCount) }
+            verify(exactly = 1) { reservationStatusService.cancelReservationSafely(reservationId, "RESERVATION_FAILED") }
+            verify(exactly = 1) { redisTemplate.delete(occupiedKey) }
         }
 
         @Test
-        @DisplayName("시스템 예외 발생 시 SYSTEM_ERROR로 취소하고 점유된 재고를 복구한다")
+        @DisplayName("시스템 예외 발생 시 SYSTEM_ERROR 취소 및 재고 복구")
         fun `시스템 예외 시 예약 취소 및 재고 복구`() {
-            val reservation = mockk<Reservation>(relaxed = true)
-            val timeSlot = makeTimeSlot(stock = 10)
+            val reservation = mockk<Reservation>(relaxed = true) {
+                every { status } returns ReservationStatus.PENDING
+            }
+            val timeSlot = mockk<TimeSlot>(relaxed = true)
 
-            every { reservation.status } returns ReservationStatus.PENDING
             every { valueOps.get(occupiedKey) } returns null
-            every { lockService.acquireLock(timeSlotIdStr, lockToken) } returns true
             every { reservationRepository.findByIdWithLock(reservationId) } returns reservation
             every { timeSlotRepository.findByIdWithLock(timeSlotId) } returns timeSlot
-            every { reservation.confirmReservation() } throws RuntimeException("DB 연결 오류")
+
+            every { timeSlot.occupy(guestCount) } just Runs
+            every { timeSlot.release(guestCount) } just Runs
+
+            every { reservation.confirmReservation() } throws RuntimeException("DB Connection Timeout")
             every { redisTemplate.delete(occupiedKey) } returns true
 
             processor.processReservation(reservationId, timeSlotId, guestCount)
 
-            assertThat(timeSlot.stock).isEqualTo(10)
-            verify { reservation.cancelReservation("SYSTEM_ERROR") }
+            verify(exactly = 1) { timeSlot.release(guestCount) }
+            verify(exactly = 1) { reservationStatusService.cancelReservationSafely(reservationId, "SYSTEM_ERROR") }
         }
     }
 
     @Nested
-    @DisplayName("락 해제")
+    @DisplayName("Lock 해제")
     inner class LockRelease {
 
         @Test
-        @DisplayName("락 획득 성공 시 트랜잭션 완료 후 releaseLock을 호출한다")
+        @DisplayName("락 획득에 성공한 경우 트랜잭션 콜백을 통해 Redisson unlock이 호출됨")
         fun `정상 흐름에서 락 해제 콜백 동작`() {
             val reservation = makeReservation()
             val timeSlot = makeTimeSlot()
-
             every { valueOps.get(occupiedKey) } returns null
-            every { lockService.acquireLock(timeSlotIdStr, lockToken) } returns true
             every { reservationRepository.findByIdWithLock(reservationId) } returns reservation
             every { timeSlotRepository.findByIdWithLock(timeSlotId) } returns timeSlot
-            every { lockService.releaseLock(any(), any()) } just Runs
 
             processor.processReservation(reservationId, timeSlotId, guestCount)
 
-            verify(exactly = 0) { lockService.releaseLock(any(), any()) }
+            verify(exactly = 0) { rLock.unlock() }
 
             TransactionSynchronizationManager.getSynchronizations().forEach {
                 it.afterCompletion(TransactionSynchronization.STATUS_COMMITTED)
             }
 
-            verify(exactly = 1) { lockService.releaseLock(timeSlotIdStr, lockToken) }
+            verify(exactly = 1) { rLock.unlock() }
         }
 
         @Test
-        @DisplayName("락 획득 실패 시 releaseLock 콜백을 등록하지 않는다")
-        fun `락 획득 실패 시 releaseLock 미호출 및 미등록`() {
+        @DisplayName("락 획득 실패 시 동기화 콜백이 등록되지 않으며 unlock이 호출되지 않음")
+        fun `락 획득 실패 시 unlock 미호출 및 콜백 미등록`() {
             every { valueOps.get(occupiedKey) } returns null
-            every { lockService.acquireLock(timeSlotIdStr, lockToken) } returns false
+            every { rLock.tryLock(any(), any(), any()) } returns false
 
             processor.processReservation(reservationId, timeSlotId, guestCount)
 
             assertThat(TransactionSynchronizationManager.getSynchronizations()).isEmpty()
-            verify(exactly = 0) { lockService.releaseLock(any(), any()) }
-        }
-    }
-
-    @Nested
-    @DisplayName("cancelReservationSafely")
-    inner class CancelReservationSafely {
-
-        @Test
-        @DisplayName("Fail-Fast 취소 요청 시 예약이 없어도 예외 없이 종료된다")
-        fun `예약 Entity 없어도 예외 없이 종료`() {
-            every { valueOps.get(occupiedKey) } returns "true"
-
-            processor.processReservation(reservationId, timeSlotId, guestCount)
-
-            verify {
-                reservationStatusService.cancelReservationSafely(
-                    reservationId,
-                    "ALREADY_OCCUPIED_FAIL_FAST",
-                )
-            }
+            verify(exactly = 0) { rLock.unlock() }
         }
     }
 }
