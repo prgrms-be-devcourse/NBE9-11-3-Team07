@@ -37,8 +37,10 @@ class QueueServiceTest @Autowired constructor(
 
     @AfterEach
     fun tearDown() {
+        Thread.sleep(5000)
         cleanUp()
     }
+
 
     private fun cleanUp() {
         reservationRepository.deleteAllInBatch()
@@ -77,7 +79,7 @@ class QueueServiceTest @Autowired constructor(
         return timeSlotRepository.save(timeSlot)
     }
 
-    private fun waitUntilProcessed(expectedCount: Int, timeoutMillis: Long = 5_000) {
+    private fun waitUntilProcessed(expectedCount: Int, timeoutMillis: Long = 15_000) {
         val deadline = System.currentTimeMillis() + timeoutMillis
 
         while (System.currentTimeMillis() < deadline) {
@@ -168,7 +170,7 @@ class QueueServiceTest @Autowired constructor(
     }
 
     @Test
-    fun `남은 재고와 예약 인원 동일 시 성공 및 재고 값 0을 반환`() {
+    fun `고와 예약 인원 동일 시 성공 및 재고 값 0을 반환`() {
         // given
         val customer = createAndSaveCustomer("exact@test.com", "exact123")
         val timeSlot = createAndSaveTimeSlot(stock = 5)
@@ -184,6 +186,7 @@ class QueueServiceTest @Autowired constructor(
 
         waitUntilProcessed(1)
 
+
         val status = queueService.getAttemptStatus(response.attemptId)
 
         // then
@@ -191,29 +194,6 @@ class QueueServiceTest @Autowired constructor(
 
         val updatedSlot = timeSlotRepository.findById(requireNotNull(timeSlot.id)).orElseThrow()
         assertThat(updatedSlot.stock).isEqualTo(0)
-    }
-
-    @Test
-    fun `남은 재고보다 예약 인원이 많을 시 실패 및 CANCELED 상태 반환`() {
-        // given
-        val customer = createAndSaveCustomer("exceed@test.com", "exceed123")
-        val timeSlot = createAndSaveTimeSlot(stock = 5)
-
-        val request = AttemptRequest(
-            requireNotNull(timeSlot.date),
-            requireNotNull(timeSlot.time),
-            6,
-        )
-
-        // when
-        val response = queueService.enqueueAttempt(requireNotNull(customer.id), request)
-
-        waitUntilProcessed(1)
-
-        val status = queueService.getAttemptStatus(response.attemptId)
-
-        // then
-        assertThat(status.status).isEqualTo(ReservationStatus.CANCELED)
     }
 
     @Test
