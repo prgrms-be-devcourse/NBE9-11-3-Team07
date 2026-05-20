@@ -5,6 +5,7 @@ import io.mockk.every
 import org.springframework.data.redis.core.ValueOperations
 import io.mockk.impl.annotations.InjectMockKs
 import io.mockk.impl.annotations.MockK
+import io.mockk.verify
 import io.mockk.junit5.MockKExtension
 import io.mockk.mockk
 import org.springframework.data.redis.core.StringRedisTemplate
@@ -40,8 +41,11 @@ class LockServiceTest {
         val secondAcquire = lockService.acquireLock(timeSlotId, token)
 
         // then
+        // then
         assertThat(firstAcquire).isTrue()
         assertThat(secondAcquire).isTrue()
+        verify(exactly = 2) { valueOps.setIfAbsent(any(), any(), any()) }
+        verify(exactly = 1) { redisTemplate.delete(any<String>()) }
     }
 
     @Test
@@ -63,6 +67,11 @@ class LockServiceTest {
         // then
         assertThat(result).isTrue()
         assertThat(otherResult).isFalse()
+        // then
+        assertThat(result).isTrue()
+        assertThat(otherResult).isFalse()
+        verify(exactly = 1) { valueOps.setIfAbsent(any(), eq(token), any()) }
+        verify(exactly = 1) { valueOps.setIfAbsent(any(), eq(otherToken), any()) }
     }
 
     @Test
@@ -76,7 +85,7 @@ class LockServiceTest {
         every { redisTemplate.opsForValue() } returns valueOps
         every { valueOps.setIfAbsent(any(), eq(token), any()) } returns true
         every { valueOps.setIfAbsent(any(), eq(otherToken), any()) } returnsMany listOf(false, true)
-        every { valueOps.get(any()) } returnsMany listOf(token, token, null)
+        every { valueOps.get(any()) } returnsMany listOf(token, token)
         every { redisTemplate.delete(any<String>()) } returns true
 
         // when
@@ -89,5 +98,6 @@ class LockServiceTest {
         // then
         assertThat(stillLocked).isFalse()
         assertThat(nowUnlocked).isTrue()
+        verify(exactly = 1) { redisTemplate.delete(any<String>()) }
     }
 }
