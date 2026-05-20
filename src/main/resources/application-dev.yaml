@@ -2,11 +2,13 @@ spring:
   data:
     redis:
       sentinel:
+        # 로컬 docker-compose Sentinel 컨테이너 설정
         master: mymaster
-        nodes:
-          - localhost:26379
-          - localhost:26380
-          - localhost:26381
+        nodes: localhost:26379,localhost:26380,localhost:26381
 
   datasource:
+    # 로컬 MySQL 설정
     url: jdbc:mysql://localhost:3306/moju_db?serverTimezone=Asia/Seoul&useSSL=false&allowPublicKeyRetrieval=true
+    username: root
+    password: root
+    driver-class-name: com.mysql.cj.jdbc.Driver

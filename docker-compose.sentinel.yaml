@@ -1,0 +1,14 @@
+services:
+  # Sentinel-3: Master/Replica 상태 감시 (3대 중 3번)
+  # 페일오버 과반수(2/3) 충족을 위한 독립 Sentinel 서버
+  # ANNOUNCE_IP: 이 서버(mozu-sentinel)의 프라이빗 IP
+  sentinel-3:
+    build:
+      context: .
+      dockerfile: Dockerfile.sentinel
+    container_name: moju-sentinel-3
+    ports:
+      - "26379:26379"
+    environment:
+      - ANNOUNCE_IP=172.31.11.153
+    restart: on-failure

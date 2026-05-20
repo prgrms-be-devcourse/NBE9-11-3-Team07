@@ -49,4 +49,6 @@ docker-compose.override.yaml
 .CLAUDE.md
 
 # 페일오버 테스트 로그 파일
+sentinel_failover.logperformance-test/tokens.json
+user_ids.txt
 sentinel_failover.log
