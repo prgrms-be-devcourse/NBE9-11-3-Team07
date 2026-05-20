@@ -7,13 +7,16 @@ spring:
 
   data:
     redis:
-      host: redis
-      port: 6379
+      sentinel:
+        # 환경변수로 주입, 기본값은 로컬 Sentinel 설정
+        master: ${SPRING_DATA_REDIS_SENTINEL_MASTER:mymaster}
+        nodes: ${SPRING_DATA_REDIS_SENTINEL_NODES:localhost:26379,localhost:26380,localhost:26381}
 
   datasource:
-    url: jdbc:mysql://db:3306/moju_db?serverTimezone=Asia/Seoul&useSSL=false&allowPublicKeyRetrieval=true
-    username: root
-    password: root
+    # 환경변수로 주입, 기본값은 로컬 MySQL 설정
+    url: ${SPRING_DATASOURCE_URL:jdbc:mysql://localhost:3306/moju_db?serverTimezone=Asia/Seoul&useSSL=false&allowPublicKeyRetrieval=true}
+    username: ${SPRING_DATASOURCE_USERNAME:root}
+    password: ${SPRING_DATASOURCE_PASSWORD:root}
     driver-class-name: com.mysql.cj.jdbc.Driver
 
   sql:
@@ -42,11 +45,11 @@ spring:
             redirect-uri: http://localhost:8080/login/oauth2/code/google
 
 jwt:
-  secret: thisIsATestSecretKeyForLocalDevelopment123456
+  secret: ${JWT_SECRET:thisIsATestSecretKeyForLocalDevelopment123456}
   expiration: 1800000
   refresh-expiration: 604800000
 
-# 모니터링 설정 (윤현정 추가)
+# 모니터링 설정
 management:
   endpoints:
     web:

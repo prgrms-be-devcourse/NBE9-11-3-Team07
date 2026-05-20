@@ -1,0 +1,24 @@
+services:
+  # Redis Replica: Master 데이터 복제본, 읽기 분산 + 페일오버 대상
+  # replicaof: mozu-redis-master 프라이빗 IP로 복제
+  redis-replica:
+    image: redis:7.2
+    container_name: moju-redis-replica
+    ports:
+      - "6379:6379"
+    command: redis-server --replicaof 172.31.10.231 6379
+
+  # Sentinel-2: Master/Replica 상태 감시 (3대 중 2번)
+  # ANNOUNCE_IP: 이 서버(mozu-redis-replica)의 프라이빗 IP
+  sentinel-2:
+    build:
+      context: .
+      dockerfile: Dockerfile.sentinel
+    container_name: moju-sentinel-2
+    ports:
+      - "26379:26379"
+    environment:
+      - ANNOUNCE_IP=172.31.8.38
+    restart: on-failure
+    depends_on:
+      - redis-replica

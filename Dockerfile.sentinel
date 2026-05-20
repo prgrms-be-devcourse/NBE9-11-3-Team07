@@ -1,0 +1,8 @@
+FROM redis:7.2
+
+# sentinel.conf를 이미지에 포함
+COPY sentinel.conf /etc/redis/sentinel.conf
+
+# 컨테이너 시작 시 환경변수 ANNOUNCE_IP를 sentinel.conf에 동적으로 추가
+# \n으로 줄바꿈 후 추가해야 기존 내용과 분리됨
+CMD sh -c "echo '' >> /etc/redis/sentinel.conf && echo 'sentinel announce-ip '${ANNOUNCE_IP} >> /etc/redis/sentinel.conf && redis-sentinel /etc/redis/sentinel.conf"
