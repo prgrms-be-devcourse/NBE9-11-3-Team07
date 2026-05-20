@@ -8,7 +8,6 @@ data class RsData<T>(
     val data: T? = null,
 ) {
     companion object {
-        @JvmStatic
         fun <T> of(
             resultCode: String,
             msg: String,

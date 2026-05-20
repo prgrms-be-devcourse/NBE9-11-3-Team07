@@ -32,7 +32,6 @@ class ReservationDto {
         val cancelReason: String?
     ) {
         companion object {
-            @JvmStatic
             fun from(reservation: Reservation): Response {
                 return Response(
                     reservationId = reservation.id,

@@ -62,9 +62,9 @@ class RedisUtil(
     }
 
     companion object {
-        @JvmStatic fun queueKey(timeSlotId: String): String = "queue:$timeSlotId"
-        @JvmStatic fun lockKey(timeSlotId: String): String = "lock:$timeSlotId"
-        @JvmStatic fun waitingKey(userId: String): String = "waiting:$userId"
+       fun queueKey(timeSlotId: String): String = "queue:$timeSlotId"
+       fun lockKey(timeSlotId: String): String = "lock:$timeSlotId"
+        fun waitingKey(userId: String): String = "waiting:$userId"
         fun generateToken(): String = UUID.randomUUID().toString()
     }
 }
