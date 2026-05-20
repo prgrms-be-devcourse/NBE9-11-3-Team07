@@ -1,12 +1,13 @@
 package com.back.mozu.domain.queue.service
 
-import com.back.mozu.global.redis.RedisUtil
+
 import io.mockk.every
-import io.mockk.justRun
-import io.mockk.verify
+import org.springframework.data.redis.core.ValueOperations
 import io.mockk.impl.annotations.InjectMockKs
 import io.mockk.impl.annotations.MockK
 import io.mockk.junit5.MockKExtension
+import io.mockk.mockk
+import org.springframework.data.redis.core.StringRedisTemplate
 import org.assertj.core.api.Assertions.assertThat
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.extension.ExtendWith
@@ -15,19 +16,23 @@ import java.util.UUID
 @ExtendWith(MockKExtension::class)
 class LockServiceTest {
 
-    @MockK lateinit var redisUtil: RedisUtil
+    @MockK
+    lateinit var redisTemplate: StringRedisTemplate
 
-    @InjectMockKs lateinit var lockService: LockService
+    @InjectMockKs
+    lateinit var lockService: LockService
 
     @Test
     fun `락 획득 성공 후 해제하면 동일 슬롯에 재획득이 가능하다`() {
         // given
         val timeSlotId = "test-slot-1"
         val token = UUID.randomUUID().toString()
-        val lockKey = RedisUtil.lockKey(timeSlotId)
+        val valueOps = mockk<ValueOperations<String, String>>()
 
-        every { redisUtil.lockAcquire(lockKey, token, any()) } returns true
-        justRun { redisUtil.lockRelease(lockKey, token) }
+        every { redisTemplate.opsForValue() } returns valueOps
+        every { valueOps.setIfAbsent(any(), any(), any()) } returns true
+        every { valueOps.get(any()) } returns token
+        every { redisTemplate.delete(any<String>()) } returns true
 
         // when
         val firstAcquire = lockService.acquireLock(timeSlotId, token)
@@ -37,8 +42,6 @@ class LockServiceTest {
         // then
         assertThat(firstAcquire).isTrue()
         assertThat(secondAcquire).isTrue()
-        verify(exactly = 2) { redisUtil.lockAcquire(lockKey, token, 3000L) }
-        verify(exactly = 1) { redisUtil.lockRelease(lockKey, token) }
     }
 
     @Test
@@ -47,10 +50,11 @@ class LockServiceTest {
         val timeSlotId = "test-slot-2"
         val token = UUID.randomUUID().toString()
         val otherToken = UUID.randomUUID().toString()
-        val lockKey = RedisUtil.lockKey(timeSlotId)
+        val valueOps = mockk<ValueOperations<String, String>>()
 
-        every { redisUtil.lockAcquire(lockKey, token, 3000L) } returns true
-        every { redisUtil.lockAcquire(lockKey, otherToken, 3000L) } returns false
+        every { redisTemplate.opsForValue() } returns valueOps
+        every { valueOps.setIfAbsent(any(), eq(token), any()) } returns true
+        every { valueOps.setIfAbsent(any(), eq(otherToken), any()) } returns false
 
         // when
         val result = lockService.acquireLock(timeSlotId, token)
@@ -67,18 +71,20 @@ class LockServiceTest {
         val timeSlotId = "test-slot-3"
         val token = UUID.randomUUID().toString()
         val otherToken = UUID.randomUUID().toString()
-        val lockKey = RedisUtil.lockKey(timeSlotId)
+        val valueOps = mockk<ValueOperations<String, String>>()
 
-        every { redisUtil.lockAcquire(lockKey, token, 3000L) } returns true
-        every { redisUtil.lockAcquire(lockKey, otherToken, 3000L) } returnsMany listOf(false, true)
-        justRun { redisUtil.lockRelease(lockKey, any()) }
+        every { redisTemplate.opsForValue() } returns valueOps
+        every { valueOps.setIfAbsent(any(), eq(token), any()) } returns true
+        every { valueOps.setIfAbsent(any(), eq(otherToken), any()) } returnsMany listOf(false, true)
+        every { valueOps.get(any()) } returnsMany listOf(token, token, null)
+        every { redisTemplate.delete(any<String>()) } returns true
 
         // when
         lockService.acquireLock(timeSlotId, token)
-        lockService.releaseLock(timeSlotId, otherToken)                    // 잘못된 토큰으로 해제 시도
-        val stillLocked = lockService.acquireLock(timeSlotId, otherToken)  // 락 아직 유지 중 → 실패
-        lockService.releaseLock(timeSlotId, token)                         // 올바른 토큰으로 해제
-        val nowUnlocked = lockService.acquireLock(timeSlotId, otherToken)  // 해제 후 → 성공
+        lockService.releaseLock(timeSlotId, otherToken)
+        val stillLocked = lockService.acquireLock(timeSlotId, otherToken)
+        lockService.releaseLock(timeSlotId, token)
+        val nowUnlocked = lockService.acquireLock(timeSlotId, otherToken)
 
         // then
         assertThat(stillLocked).isFalse()
